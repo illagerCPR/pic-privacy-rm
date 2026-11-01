@@ -39,7 +39,7 @@ src/core/      pure container logic, no DOM, fully testable in Node
   webp.ts        RIFF chunks + VP8X flag fixups
   gif.ts         block walk
   isobmff.ts     ISO BMFF boxes: iloc / iinf / iref / ipma read and rewrite
-  heif.ts        HEIC item table, allow-list rebuild, lossless payload repack
+  heif.ts        HEIC/AVIF item table, allow-list rebuild, lossless payload repack
   tiff.ts        TIFF/EXIF IFD reader
   gps.ts         DMS → decimal, display fields
   xmp.ts         tolerant XMP scanner
@@ -83,8 +83,10 @@ Three independent layers, because a metadata remover that lies is worse than no 
    output, and write it to `tests/output/` for the next layer.
 3. **Independent verification** (`tools/verify.py`) decodes the outputs with Pillow — not with our own
    code — and checks that no EXIF/GPS/XMP/IPTC/C2PA survives, that the pixels are byte-identical to the
-   input, and that the files still decode. HEIF goes through ffmpeg instead, because Pillow cannot open it;
-   the sample ExifTool ships has a stub codec payload, so for that one the container's declared stream
+   input, and that the files still decode. HEIC and AVIF go through ffmpeg instead, for two different
+   reasons: Pillow cannot open HEIC at all, and for AVIF it *synthesises* an `Exif` block from the
+   container's `irot` — a stripped file then reports an orientation tag that is not in its bytes. The
+   HEIC sample ExifTool ships has a stub codec payload, so for that one the container's declared stream
    layout is compared rather than pixels.
 4. **End-to-end tests** (`e2e/`) drive the real UI in Chrome: upload, inspect the drawer, clean, download
    the ZIP and inspect its bytes; check orientation baking and the pre-clean orientation warning; open the
@@ -148,6 +150,13 @@ HEIF-specific traps, all of which produced a broken file at least once:
   of trying to patch addresses in place.
 - ffmpeg decodes a HEIF tile grid only with `-map 0:g:0`; `-map 0:v:0` hands you a single 512×512 tile and
   an unchanged checksum that proves nothing.
+- HEIC and AVIF are the same container. Decide the format from `ftyp` brands, never from the file
+  extension, and check the compatibility list as well: `mif1` is the generic brand and can hold either
+  codec.
+- Pillow maps a container's `irot` to an EXIF orientation tag when reading AVIF, so `getexif()` is not
+  evidence of leftover metadata there. Look at the bytes (`Exif\0\0`, `x:xmpmeta`) instead.
+- A `moov` box means an image sequence (`avis`, live photos). It is refused outright rather than stripped:
+  dropping it would leave an animation that no longer plays.
 
 ## Commits
 
