@@ -34,8 +34,9 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
 - **JFIF and the Adobe `APP14` flag** tell decoders how to interpret CMYK and YCCK JPEGs.
 - **APNG and WebP animation structures** are what makes animated images animate.
 - **Orientation** is the one tag with no perfect answer: dropping it can leave photos sideways in some
-  viewers. Use *Bake orientation into pixels* to rotate the image with Canvas instead — that re-encodes
-  the picture, so it costs a little quality and is strictly opt-in.
+  viewers. The app warns you before cleaning a file that carries one; *Bake orientation into pixels*
+  rotates the image with Canvas instead — that re-encodes the picture, so it costs a little quality and
+  is strictly opt-in.
 
 ## Privacy by construction
 
@@ -82,8 +83,9 @@ Yes. The container is rewritten; the entropy-coded image data is copied byte for
 or re-compressed. The test suite compares decoded pixels of every input and output.
 
 **Why does my photo look rotated after cleaning?**
-The EXIF orientation tag was part of the removed metadata. Either enable *Bake orientation into pixels*,
-or let your viewer rotate the image.
+The EXIF orientation tag was part of the removed metadata. Such files are flagged before you clean them —
+one click on *Bake orientation into pixels* rotates the pixels and fixes it for good. Otherwise let your
+viewer rotate the image.
 
 **Does it remove the "AI generated" label?**
 It removes C2PA manifests and XMP fields, which is where such labels usually live. It cannot remove

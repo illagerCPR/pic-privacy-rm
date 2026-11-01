@@ -82,10 +82,13 @@ Three independent layers, because a metadata remover that lies is worse than no 
    code — and checks that no EXIF/GPS/XMP/IPTC/C2PA survives, that the pixels are byte-identical to the
    input, and that the files still decode.
 4. **End-to-end tests** (`e2e/`) drive the real UI in Chrome: upload, inspect the drawer, clean, download
-   the ZIP and inspect its bytes; check orientation baking; open the all-metadata tab, expand a MakerNote
-   hex dump and compare the listing against the cleaned output; assert that the page made zero external
-   requests; and load the production build with the network switched off to prove the service worker
-   keeps the app usable offline.
+   the ZIP and inspect its bytes; check orientation baking and the pre-clean orientation warning; open the
+   all-metadata tab, expand a MakerNote hex dump and compare the listing against the cleaned output; assert
+   that the page made zero external requests; and load the production build with the network switched off
+   to prove the service worker keeps the app usable offline.
+5. **Real-world samples** (`tests/real.test.ts`) run camera and phone exports through the same pipeline.
+   The folder is git-ignored because they are personal photos: drop files into `tests/real/` and
+   `pnpm test && pnpm verify` will clean them and decode the output with Pillow. CI skips this layer.
 
 ## Adding a format
 
@@ -111,6 +114,10 @@ Three independent layers, because a metadata remover that lies is worse than no 
   fails, so nothing in the listing is allowed to decide what gets removed.
 - The listing's container group is mixed: JFIF, Adobe APP14 and (depending on the setting) ICC survive,
   unknown APPn do not. Kept/removed is per item; a group may only claim a removal when something really goes.
+- C2PA 2.x labels a manifest `urn:c2pa:<uuid>`, not `c2pa.manifest`. Matching the label alone misses every
+  current generator (OpenAI's images, for one). Find the deepest superbox that owns a `c2pa.claim`.
+- Cameras without a position fix still write a GPS IFD full of zeros. Treat `0°, 0°` as "no fix" or the
+  report invents a location in the Gulf of Guinea; vivo's Android build does exactly this.
 
 ## Commits
 
