@@ -49,6 +49,11 @@ export const en: Dict = {
   'settings.keepIccHint':
     'Recommended. Without it, wide-gamut photos can shift colour in some apps.',
   'settings.bake': 'Bake orientation into pixels',
+  'settings.orientationHint':
+    '{n} files keep their rotation in an EXIF tag that cleaning removes, so they may display sideways',
+  'settings.orientationHint.one':
+    'This file keeps its rotation in an EXIF tag that cleaning removes, so it may display sideways',
+  'settings.orientationFix': 'Bake orientation',
   'settings.bakeHint':
     'Some viewers show photos sideways once the EXIF orientation tag is gone. This rotates the pixels with Canvas and re-encodes the image (lossy).',
 
@@ -197,6 +202,10 @@ export const en: Dict = {
   'toast.zip': 'Building archive…',
   'toast.zipDone': 'Archive download started',
   'toast.copied': 'Copied',
+  'toast.orientationLost':
+    '{n} files lost their orientation tag — re-clean with “Bake orientation” if they look sideways',
+  'toast.orientationLost.one':
+    'The orientation tag was removed — re-clean with “Bake orientation” if the photo looks sideways',
 
   'drawer.metadata': 'All metadata',
   'meta.search': 'Search tags or values',

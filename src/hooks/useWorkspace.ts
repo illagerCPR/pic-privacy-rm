@@ -322,6 +322,13 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     setProgress(null);
     const finished = itemsRef.current.filter((item) => item.state === 'done').length;
     notify('toast.done', { n: finished });
+    // The default path drops the orientation tag; say so instead of leaving the
+    // user to discover a sideways photo in their gallery.
+    const sideways = itemsRef.current.filter(
+      (item) =>
+        item.state === 'done' && !settingsRef.current.bake && (item.scan?.orientation ?? 1) > 1,
+    ).length;
+    if (sideways > 0) notify('toast.orientationLost', { n: sideways });
   }, [notify, stripLimit, stripOne]);
 
   /** A clean file still gets a downloadable copy, byte-identical to the input. */

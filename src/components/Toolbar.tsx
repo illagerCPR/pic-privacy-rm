@@ -1,7 +1,7 @@
 import type { StripOptions } from '../core/types.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { formatBytes } from '../lib/format.ts';
-import { DownloadIcon, SparkIcon, TrashIcon } from './Icons.tsx';
+import { AlertIcon, DownloadIcon, SparkIcon, TrashIcon } from './Icons.tsx';
 
 export interface Stats {
   total: number;
@@ -135,6 +135,21 @@ export function Toolbar(props: Props) {
           label={t('settings.bake')}
           hint={t('settings.bakeHint')}
         />
+        {!props.bake && props.orientationCount > 0 && (
+          <div className="settings-callout" role="note">
+            <AlertIcon size={16} />
+            <span className="settings-callout-text">
+              {t('settings.orientationHint', { n: props.orientationCount })}
+            </span>
+            <button
+              type="button"
+              className="btn btn--subtle btn--sm"
+              onClick={() => props.setBake(true)}
+            >
+              {t('settings.orientationFix')}
+            </button>
+          </div>
+        )}
         {props.bake && props.orientationCount > 0 && (
           <p className="settings-note">
             {t('stats.files', { n: props.orientationCount })} · {t('badge.orientation')} →{' '}

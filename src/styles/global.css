@@ -639,6 +639,31 @@ img {
   font-size: 12px;
 }
 
+.settings-callout {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  color: var(--text-soft);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+
+.settings-callout svg {
+  flex-shrink: 0;
+  color: var(--warn);
+}
+
+.settings-callout-text {
+  flex: 1;
+  min-width: 0;
+}
+
 .setting {
   display: flex;
   flex-direction: column;

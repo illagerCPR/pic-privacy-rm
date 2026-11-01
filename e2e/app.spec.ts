@@ -274,3 +274,31 @@ test('compares the metadata before and after stripping', async ({ page }) => {
   await expect(panes.nth(1).locator('.badge').first()).toHaveText('保留');
   await expect(panes.nth(1)).toContainText('已经没有可移除的元数据');
 });
+
+test('warns before cleaning a photo whose orientation would be lost', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'rotated.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  const callout = page.locator('.settings-callout');
+  await expect(callout).toBeVisible();
+  await expect(callout).toContainText('清理后会按未旋转的方向显示');
+
+  // One click turns the fix on; the warning has done its job and goes away.
+  await callout.getByRole('button', { name: '把方向写入像素' }).click();
+  await expect(
+    page.locator('.setting', { hasText: '把方向写入像素' }).locator('input'),
+  ).toBeChecked();
+  await expect(callout).toBeHidden();
+});
+
+test('reports the lost orientation tag after cleaning', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'rotated.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+  await expect(page.locator('.settings-callout')).toBeVisible();
+
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done')).toHaveCount(1, { timeout: 30_000 });
+  await expect(page.getByText('方向标签已删除').first()).toBeVisible();
+});

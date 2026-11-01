@@ -46,6 +46,9 @@ export const zh = {
   'settings.keepIcc': '保留 ICC 色彩配置',
   'settings.keepIccHint': '建议开启，否则广色域照片在部分软件里会偏色。',
   'settings.bake': '把方向写入像素',
+  'settings.orientationHint': '{n} 个文件带方向标签，清理后会按未旋转的方向显示',
+  'settings.orientationHint.one': '这个文件带方向标签，清理后会按未旋转的方向显示',
+  'settings.orientationFix': '把方向写入像素',
   'settings.bakeHint':
     '删掉 EXIF 方向标签后，部分查看器会把照片显示成横躺。开启后会用 Canvas 重新编码并摆正（画质有损）。',
 
@@ -194,6 +197,8 @@ export const zh = {
   'toast.zip': '正在打包…',
   'toast.zipDone': '压缩包已开始下载',
   'toast.copied': '已复制',
+  'toast.orientationLost': '{n} 个文件的方向标签已删除，若显示为横躺可开启「把方向写入像素」重新清理',
+  'toast.orientationLost.one': '方向标签已删除，若显示为横躺可开启「把方向写入像素」重新清理',
 
   'drawer.metadata': '全部元数据',
   'meta.search': '搜索标签或值',
