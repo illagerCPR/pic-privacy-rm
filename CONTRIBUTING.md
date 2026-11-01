@@ -1,7 +1,8 @@
 # Contributing
 
 Thanks for taking a look. This document is for people changing the code; the user-facing story lives in
-[README.md](README.md).
+[README.md](README.md). The design rationale — and what to reuse when building a similar pure-frontend
+tool — is in [BLUEPRINT.md](BLUEPRINT.md).
 
 ## Requirements
 

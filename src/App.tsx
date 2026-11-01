@@ -39,27 +39,20 @@ function Hero() {
 }
 
 function Steps() {
-  const { t, lang } = useI18n();
-  const steps =
-    lang === 'zh'
-      ? [
-          ['拖入照片', '支持 JPEG、PNG、WebP、GIF，可一次拖入整个文件夹。'],
-          ['看清将删除什么', 'GPS 坐标、相机型号、序列号、C2PA 凭证逐项列出，连内嵌缩略图都能预览。'],
-          ['下载干净副本', '逐字节重写容器，像素不变；处理完自动复检，残留为零才允许下载。'],
-        ]
-      : [
-          ['Drop your photos', 'JPEG, PNG, WebP and GIF — drop a whole folder at once.'],
-          ['See exactly what goes', 'GPS coordinates, camera model, serial numbers and C2PA credentials, item by item.'],
-          ['Download clean copies', 'The container is rewritten byte by byte; pixels stay identical and every output is re-checked.'],
-        ];
+  const { t } = useI18n();
+  const steps = [
+    ['steps.drop.title', 'steps.drop.body'],
+    ['steps.inspect.title', 'steps.inspect.body'],
+    ['steps.download.title', 'steps.download.body'],
+  ] as const;
 
   return (
     <section className="steps" aria-label={t('modal.title')}>
       {steps.map(([title, body], index) => (
         <article className="step" key={title}>
           <span className="step-number">{index + 1}</span>
-          <h3>{title}</h3>
-          <p>{body}</p>
+          <h3>{t(title)}</h3>
+          <p>{t(body)}</p>
         </article>
       ))}
     </section>

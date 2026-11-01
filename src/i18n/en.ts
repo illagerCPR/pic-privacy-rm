@@ -21,6 +21,13 @@ export const en: Dict = {
   'drop.formats': 'HEIC, AVIF and TIFF are supported; multi-page TIFF keeps every page. Convert image sequences (avis) first',
   'drop.dragging': 'Release to add',
 
+  'steps.drop.title': 'Drop your photos',
+  'steps.drop.body': 'JPEG, PNG, WebP, GIF, HEIC, AVIF and TIFF — drop a whole folder at once.',
+  'steps.inspect.title': 'See exactly what goes',
+  'steps.inspect.body': 'GPS coordinates, camera model, serial numbers and C2PA credentials, item by item.',
+  'steps.download.title': 'Download clean copies',
+  'steps.download.body': 'The container is rewritten byte by byte; pixels stay identical and every output is re-checked.',
+
   'stats.files': '{n} files',
   'stats.files.one': '{n} file',
   'stats.sensitive': '{n} with sensitive metadata',
@@ -187,7 +194,7 @@ export const en: Dict = {
     'Content credentials prove who captured an image and which edits were made. Removing them means the image can no longer prove provenance — which is exactly what a privacy clean-up wants. If you work in news or ad compliance, keep the original file.',
   'modal.limitsTitle': 'What it cannot do',
   'modal.limitsBody':
-    'Metadata is not content. Faces, house numbers, landmarks, watermarks and anything visible in the picture stay visible. If you need to anonymise the image itself, use a different tool. HEIC, TIFF and AVIF are not supported yet.',
+    'Metadata is not content. Faces, house numbers, landmarks, watermarks and anything visible in the picture stay visible. If you need to anonymise the image itself, use a different tool. Formats it cannot handle - SVG or PDF, say - are refused outright instead of being silently half-cleaned.',
   'modal.close': 'Got it',
 
   'footer.license': 'MIT licensed',

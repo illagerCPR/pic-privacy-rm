@@ -20,6 +20,13 @@ export const zh = {
   'drop.formats': '支持 HEIC、AVIF、TIFF；多页 TIFF 会逐页保留，序列帧（avis）请先转换',
   'drop.dragging': '松开即可添加',
 
+  'steps.drop.title': '拖入照片',
+  'steps.drop.body': '支持 JPEG、PNG、WebP、GIF、HEIC、AVIF、TIFF，可一次拖入整个文件夹。',
+  'steps.inspect.title': '看清将删除什么',
+  'steps.inspect.body': 'GPS 坐标、相机型号、序列号、C2PA 凭证逐项列出，连内嵌缩略图都能预览。',
+  'steps.download.title': '下载干净副本',
+  'steps.download.body': '逐字节重写容器，像素不变；处理完自动复检，残留为零才允许下载。',
+
   'stats.files': '{n} 个文件',
   'stats.files.one': '{n} 个文件',
   'stats.sensitive': '{n} 个含敏感元数据',
@@ -182,7 +189,7 @@ export const zh = {
     '内容凭证是带有签名的来源证明。移除它意味着这张图不再能证明“由谁拍摄、经过哪些编辑”，这正是隐私清理的目的；但如果你需要参与新闻或广告合规流程，请保留原始文件。',
   'modal.limitsTitle': '它做不到什么',
   'modal.limitsBody':
-    '元数据不是画面内容：照片里拍到的人脸、门牌、地标、水印、以及肉眼可见的倒影，都不会被清理。若需要匿名化画面本身，请另找专门工具。HEIC、TIFF、AVIF 暂不支持。',
+    '元数据不是画面内容：照片里拍到的人脸、门牌、地标、水印、以及肉眼可见的倒影，都不会被清理。若需要匿名化画面本身，请另找专门工具。处理不了的格式（比如 SVG、PDF）会直接说明不支持，而不是假装清理过。',
   'modal.close': '知道了',
 
   'footer.license': 'MIT 许可',

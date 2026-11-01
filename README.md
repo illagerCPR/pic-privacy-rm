@@ -4,7 +4,7 @@
 
 **Strip the metadata hiding inside your photos — in your browser, without uploading anything.**
 
-[Live demo](https://illagercpr.github.io/pic-privacy-rm/) · [中文说明](README.zh-CN.md)
+[Live demo](https://www.illageraris.dpdns.org/pic-privacy-rm/) · [中文说明](README.zh-CN.md)
 
 ![PicPrivacy screenshot](docs/screenshot-en.jpg)
 
@@ -64,11 +64,15 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
   shown next to the original, so what survived is evidence rather than a promise.
 - **Export a diagnostic report.** If a result ever looks wrong, download a JSON report of exactly what the
   engine saw — hashes, findings, container blocks, settings and the verification result — and attach it to
-  a bug report. It describes the metadata, not the picture, but give it a read before sharing.
+  a bug report. One file from its details panel, or the whole batch as a single document. It describes the
+  metadata, not the picture, but give it a read before sharing.
 - Batch clean, per-file states, progress — cancellable at any point, with the file in flight
   allowed to finish so its output is still verified — and a store-only ZIP for download.
 - Optional deep-clean of trailing data after the end marker.
-- English and Chinese UI, light and dark themes, keyboard accessible.
+- English and Chinese UI, light and dark themes, and a details dialog that keeps the keyboard inside it
+  while open and hands focus back on close.
+
+![The details panel: camera, timestamps, GPS coordinates and embedded thumbnails, item by item](docs/screenshot-details.jpg)
 
 ![The all-metadata tab: 81 entries in the original, 4 in the cleaned file](docs/screenshot-metadata.png)
 
