@@ -4,7 +4,7 @@
  * from interleaving two Blob-reading jobs, and serial execution keeps memory
  * flat and behaviour deterministic.
  */
-import { inspectFile } from '../core/inspect.ts';
+import { inspectBlob } from '../core/inspect.ts';
 import { scanFile, stripFile, verifyBlob } from '../core/pipeline.ts';
 import type { StripOptions } from '../core/types.ts';
 
@@ -12,7 +12,7 @@ type Request =
   | { id: number; kind: 'scan'; file: File }
   | { id: number; kind: 'strip'; file: File; options: StripOptions }
   | { id: number; kind: 'verify'; blob: Blob }
-  | { id: number; kind: 'inspect'; file: File; keepIcc: boolean };
+  | { id: number; kind: 'inspect'; blob: Blob; keepIcc: boolean };
 
 const scope = self as unknown as {
   onmessage: ((event: MessageEvent<Request>) => void) | null;
@@ -32,7 +32,7 @@ async function handle(request: Request): Promise<void> {
       return;
     }
     if (request.kind === 'inspect') {
-      const report = await inspectFile(request.file, { keepIcc: request.keepIcc });
+      const report = await inspectBlob(request.blob, { keepIcc: request.keepIcc });
       scope.postMessage({ id: request.id, ok: true, kind: 'inspect', report });
       return;
     }

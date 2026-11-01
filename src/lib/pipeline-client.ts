@@ -1,5 +1,5 @@
 /** Main-thread facade over the worker, with a graceful same-thread fallback. */
-import { inspectFile, type InspectOptions } from '../core/inspect.ts';
+import { inspectBlob, type InspectOptions } from '../core/inspect.ts';
 import type { MetadataReport } from '../core/metadata.ts';
 import { scanFile, stripFile, verifyBlob, type StripOutcome } from '../core/pipeline.ts';
 import type { ScanResult, StripOptions, VerifyResult } from '../core/types.ts';
@@ -18,7 +18,7 @@ export interface PipelineClient {
   scan(file: File): Promise<ScanResult>;
   strip(file: File, options: StripOptions): Promise<StripOutcome>;
   verify(blob: Blob): Promise<VerifyResult>;
-  inspect(file: File, options: InspectOptions): Promise<MetadataReport>;
+  inspect(blob: Blob, options: InspectOptions): Promise<MetadataReport>;
   dispose(): void;
 }
 
@@ -120,9 +120,9 @@ export function createPipelineClient(): PipelineClient {
     verify(blob) {
       return request<VerifyResult>({ kind: 'verify', blob }, () => verifyBlob(blob));
     },
-    inspect(file, options) {
-      return request<MetadataReport>({ kind: 'inspect', file, keepIcc: options.keepIcc }, () =>
-        inspectFile(file, options),
+    inspect(blob, options) {
+      return request<MetadataReport>({ kind: 'inspect', blob, keepIcc: options.keepIcc }, () =>
+        inspectBlob(blob, options),
       );
     },
     dispose() {

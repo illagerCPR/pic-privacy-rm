@@ -214,3 +214,63 @@ test('lists every metadata entry and filters the table', async ({ page }) => {
   await expect(drawer.locator('.meta-row')).toHaveCount(0);
   await expect(drawer).toContainText('没有匹配项');
 });
+
+test('previews vendor blobs as a hex dump', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  const drawer = page.locator('.drawer');
+  await drawer.getByRole('tab', { name: '全部元数据' }).click();
+  await expect(drawer.locator('.meta-row').first()).toBeVisible({ timeout: 15_000 });
+
+  // The fixture's MakerNote is eight bytes we deliberately do not interpret.
+  const makerNote = drawer.locator('.meta-row', { hasText: 'MakerNote' });
+  await expect(makerNote).toContainText('0102030405060708');
+  await makerNote.getByRole('button', { name: '查看字节' }).click();
+
+  const hex = makerNote.locator('.meta-hex');
+  await expect(hex).toBeVisible();
+  await expect(hex).toContainText('00000000');
+  await expect(hex).toContainText('01 02 03 04 05 06 07 08');
+  await expect(hex).toContainText('8 / 8 字节');
+
+  await makerNote.getByRole('button', { name: '收起字节' }).click();
+  await expect(hex).toBeHidden();
+});
+
+test('compares the metadata before and after stripping', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done')).toHaveCount(1, { timeout: 30_000 });
+
+  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  const drawer = page.locator('.drawer');
+  await drawer.getByRole('tab', { name: '全部元数据' }).click();
+  await expect(drawer.locator('.meta-row').first()).toBeVisible({ timeout: 15_000 });
+
+  // The comparison only exists once an output blob does.
+  await drawer.getByRole('button', { name: '对比清理前后' }).click();
+  const panes = drawer.locator('.meta-pane');
+  await expect(panes).toHaveCount(2);
+  await expect(panes.nth(0).locator('.meta-pane-head')).toContainText('清理前');
+  await expect(panes.nth(1).locator('.meta-pane-head')).toContainText('清理后');
+
+  // Before: everything the file carried.
+  expect(await panes.nth(0).locator('.meta-row').count()).toBeGreaterThan(70);
+  await expect(panes.nth(0)).toContainText('TestCam');
+
+  // After: the file entry, the ICC profile colour needs and the JFIF header a
+  // decoder needs. Nothing else survives the strip.
+  await expect(panes.nth(1).locator('.meta-row')).toHaveCount(4, { timeout: 15_000 });
+  await expect(panes.nth(1)).not.toContainText('TestCam');
+  await expect(panes.nth(1)).not.toContainText(`35° 41' 21.6"`);
+  await expect(panes.nth(1)).toContainText('ICC profile');
+  await expect(panes.nth(1)).toContainText('APP0 JFIF');
+  await expect(panes.nth(1).locator('.badge').first()).toHaveText('保留');
+  await expect(panes.nth(1)).toContainText('已经没有可移除的元数据');
+});

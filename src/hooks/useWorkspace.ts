@@ -94,6 +94,8 @@ export interface Workspace {
   downloadAll: () => Promise<void>;
   /** Full metadata listing, parsed lazily and cached per item. */
   inspectItem: (id: string) => Promise<MetadataReport | null>;
+  /** The same listing for the stripped output, used by the before/after view. */
+  inspectResult: (id: string) => Promise<MetadataReport | null>;
   options: StripOptions;
   setOptions: (patch: Partial<StripOptions>) => void;
   bake: boolean;
@@ -117,6 +119,8 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
 
   // The full listing is far more expensive than a scan, so it is built only
   // when the metadata tab is actually opened, then kept for the item's lifetime.
+  // Keys carry a `:src` / `:out` suffix so the source and the stripped copy do
+  // not collide.
   const inspectCache = useRef(new Map<string, MetadataReport>());
   const inspectPending = useRef(new Map<string, Promise<MetadataReport>>());
 
@@ -193,7 +197,8 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
 
   const removeItem = useCallback(
     (id: string) => {
-      inspectCache.current.delete(id);
+      inspectCache.current.delete(`${id}:src`);
+      inspectCache.current.delete(`${id}:out`);
       updateItems((prev) => {
         const target = prev.find((item) => item.id === id);
         if (target) URL.revokeObjectURL(target.previewUrl);
@@ -213,30 +218,36 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     setProgress(null);
   }, [updateItems]);
 
-  const inspectItem = useCallback(
-    async (id: string): Promise<MetadataReport | null> => {
-      const cached = inspectCache.current.get(id);
+  const runInspect = useCallback(
+    async (id: string, side: 'src' | 'out'): Promise<MetadataReport | null> => {
+      const key = `${id}:${side}`;
+      const cached = inspectCache.current.get(key);
       if (cached) return cached;
-      const inFlight = inspectPending.current.get(id);
+      const inFlight = inspectPending.current.get(key);
       if (inFlight) return inFlight;
 
       const item = itemsRef.current.find((entry) => entry.id === id);
       if (!item || item.scan?.supported === false) return null;
+      const blob = side === 'src' ? item.file : item.result?.blob;
+      if (!blob) return null;
 
       const task = pipeline
-        .inspect(item.file, { keepIcc: settingsRef.current.options.keepIcc })
+        .inspect(blob, { keepIcc: settingsRef.current.options.keepIcc })
         .then((report) => {
-          inspectCache.current.set(id, report);
+          inspectCache.current.set(key, report);
           return report;
         })
         .finally(() => {
-          inspectPending.current.delete(id);
+          inspectPending.current.delete(key);
         });
-      inspectPending.current.set(id, task);
+      inspectPending.current.set(key, task);
       return task;
     },
     [pipeline],
   );
+
+  const inspectItem = useCallback((id: string) => runInspect(id, 'src'), [runInspect]);
+  const inspectResult = useCallback((id: string) => runInspect(id, 'out'), [runInspect]);
 
   const stripOne = useCallback(
     async (item: Item) => {
@@ -271,6 +282,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
           reencoded,
         };
 
+        inspectCache.current.delete(`${item.id}:out`);
         if (!verify.ok) {
           patchItem(item.id, { state: 'failed', error: 'error.verifyFailed', result });
           return;
@@ -379,6 +391,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     downloadItem,
     downloadAll,
     inspectItem,
+    inspectResult,
     options: settings.options,
     setOptions,
     bake: settings.bake,

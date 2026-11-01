@@ -225,11 +225,19 @@ interface Props {
   onStrip: () => void;
   onDownload: () => void;
   onLoadMetadata: (id: string) => Promise<MetadataReport | null>;
+  onLoadResultMetadata: (id: string) => Promise<MetadataReport | null>;
 }
 
 type Tab = 'privacy' | 'structure' | 'meta';
 
-export function DetailsDrawer({ item, onClose, onStrip, onDownload, onLoadMetadata }: Props) {
+export function DetailsDrawer({
+  item,
+  onClose,
+  onStrip,
+  onDownload,
+  onLoadMetadata,
+  onLoadResultMetadata,
+}: Props) {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('privacy');
   const [meta, setMeta] = useState<{
@@ -238,12 +246,26 @@ export function DetailsDrawer({ item, onClose, onStrip, onDownload, onLoadMetada
     error: string | null;
   }>({ loading: false, report: null, error: null });
   const metaLoadedFor = useRef<string | null>(null);
+
+  // Before/after comparison. The stripped listing is fetched on demand too,
+  // even later than the source one: most people never open this view.
+  const [compareOn, setCompareOn] = useState(false);
+  const [after, setAfter] = useState<{
+    loading: boolean;
+    report: MetadataReport | null;
+    error: string | null;
+  }>({ loading: false, report: null, error: null });
+  const afterLoadedFor = useRef<Blob | null>(null);
   const itemId = item?.id;
+  const resultBlob = item?.result?.blob ?? null;
 
   useEffect(() => {
     setTab('privacy');
     setMeta({ loading: false, report: null, error: null });
     metaLoadedFor.current = null;
+    setCompareOn(false);
+    setAfter({ loading: false, report: null, error: null });
+    afterLoadedFor.current = null;
   }, [itemId]);
 
   // The listing is built on demand: only opening this tab pays for it.
@@ -271,6 +293,31 @@ export function DetailsDrawer({ item, onClose, onStrip, onDownload, onLoadMetada
     };
   }, [tab, itemId, onLoadMetadata]);
 
+  // Re-inspecting after a re-strip: the output Blob identity is the cache key.
+  useEffect(() => {
+    if (!compareOn || !itemId || !resultBlob) return undefined;
+    if (afterLoadedFor.current === resultBlob) return undefined;
+    afterLoadedFor.current = resultBlob;
+    let cancelled = false;
+    setAfter({ loading: true, report: null, error: null });
+    onLoadResultMetadata(itemId)
+      .then((report) => {
+        if (!cancelled) setAfter({ loading: false, report, error: null });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setAfter({
+            loading: false,
+            report: null,
+            error: error instanceof Error ? error.message : 'error',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [compareOn, itemId, resultBlob, onLoadResultMetadata]);
+
   useEffect(() => {
     if (!item) return undefined;
     const onKey = (event: KeyboardEvent) => {
@@ -290,7 +337,13 @@ export function DetailsDrawer({ item, onClose, onStrip, onDownload, onLoadMetada
   return (
     <div className="drawer-layer">
       <div className="drawer-backdrop" role="presentation" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={t('drawer.title')}>
+      <aside
+        className="drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('drawer.title')}
+        data-wide={tab === 'meta' && compareOn ? 'true' : undefined}
+      >
         <header className="drawer-head">
           <div className="drawer-title">
             <h2>{item.name}</h2>
@@ -405,6 +458,14 @@ export function DetailsDrawer({ item, onClose, onStrip, onDownload, onLoadMetada
               loading={meta.loading}
               error={meta.error}
               supported={item.scan?.supported !== false}
+              compare={{
+                on: compareOn,
+                available: resultBlob !== null,
+                toggle: () => setCompareOn((value) => !value),
+                report: after.report,
+                loading: after.loading,
+                error: after.error,
+              }}
             />
           )}
 

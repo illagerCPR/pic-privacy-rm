@@ -171,7 +171,13 @@ function finish(
 ): MetadataGroup[] {
   const out = [...groups];
   if (text.length > 0) out.push(group('text', text));
-  if (container.length > 0) out.push(group('container', container));
+  if (container.length > 0) {
+    // Container blocks are mixed: some are what a decoder needs (JFIF, Adobe),
+    // some depend on the settings (ICC), the rest go. The badge only claims a
+    // removal when at least one listed entry is actually dropped, so a stripped
+    // file's listing never says "removed" next to a block that survived.
+    out.push(group('container', container, container.some((item) => item.removed !== false)));
+  }
   return out;
 }
 
@@ -235,9 +241,19 @@ async function inspectJpeg(src: Source, opts: InspectOptions): Promise<MetadataG
       const comment = decodeText(payload).replace(/\u0000/g, '').trim();
       if (comment) text.push({ name: 'COM comment', value: comment.slice(0, MAX_TEXT) });
     } else if (marker >= 0xe0 && marker <= 0xef) {
+      // APP0 JFIF and APP14 Adobe are the two the decoder asks for; they are
+      // kept even though every other unrecognised APPn is dropped.
+      const jfif = marker === 0xe0 && !startsWithBytes(payload, 0, 'JFXX');
+      const kept = jfif || marker === 0xee;
       const name =
-        marker === 0xe0 ? 'APP0 JFIF' : marker === 0xee ? 'APP14 Adobe' : `APP${marker - 0xe0}`;
-      container.push({ name, value: `(${payload.length} bytes)` });
+        marker === 0xe0
+          ? jfif
+            ? 'APP0 JFIF'
+            : 'APP0 JFXX (thumbnail)'
+          : marker === 0xee
+            ? 'APP14 Adobe'
+            : `APP${marker - 0xe0}`;
+      container.push({ name, value: `(${payload.length} bytes)`, removed: kept ? false : undefined });
     }
   }
 
@@ -471,6 +487,7 @@ export async function inspectSource(src: Source, opts: InspectOptions): Promise<
   return makeReport([fileGroup(info, src.size), ...groups]);
 }
 
-export async function inspectFile(file: File, opts: InspectOptions): Promise<MetadataReport> {
-  return inspectSource({ blob: file, size: file.size }, opts);
+/** Works on any Blob, so the stripped output can be inspected the same way. */
+export async function inspectBlob(blob: Blob, opts: InspectOptions): Promise<MetadataReport> {
+  return inspectSource({ blob, size: blob.size }, opts);
 }
