@@ -1,0 +1,85 @@
+{
+  "plain.jpg": {
+    "format": "jpeg",
+    "findings": []
+  },
+  "meta.jpg": {
+    "format": "jpeg",
+    "findings": [
+      "finding.exif",
+      "finding.gps",
+      "finding.exif.thumbnail",
+      "finding.xmp",
+      "finding.iptc",
+      "finding.c2pa",
+      "finding.comment",
+      "finding.trailer",
+      "finding.orientation",
+      "finding.jfxx.thumbnail",
+      "finding.mpf",
+      "finding.app.unknown"
+    ]
+  },
+  "progressive.jpg": {
+    "format": "jpeg",
+    "findings": [
+      "finding.exif",
+      "finding.gps",
+      "finding.exif.thumbnail",
+      "finding.orientation"
+    ]
+  },
+  "rotated.jpg": {
+    "format": "jpeg",
+    "findings": [
+      "finding.exif",
+      "finding.gps",
+      "finding.exif.thumbnail",
+      "finding.orientation"
+    ]
+  },
+  "plain.png": {
+    "format": "png",
+    "findings": []
+  },
+  "meta.png": {
+    "format": "png",
+    "findings": [
+      "finding.exif",
+      "finding.gps",
+      "finding.exif.thumbnail",
+      "finding.xmp",
+      "finding.c2pa",
+      "finding.png.text",
+      "finding.png.time",
+      "finding.trailer",
+      "finding.orientation"
+    ]
+  },
+  "plain.webp": {
+    "format": "webp",
+    "findings": []
+  },
+  "meta.webp": {
+    "format": "webp",
+    "findings": [
+      "finding.exif",
+      "finding.gps",
+      "finding.exif.thumbnail",
+      "finding.xmp",
+      "finding.c2pa",
+      "finding.orientation"
+    ]
+  },
+  "plain.gif": {
+    "format": "gif",
+    "findings": []
+  },
+  "meta.gif": {
+    "format": "gif",
+    "findings": [
+      "finding.xmp",
+      "finding.comment.gif"
+    ]
+  }
+}
