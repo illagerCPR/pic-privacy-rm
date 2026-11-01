@@ -15,7 +15,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageSequence
 
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures"
@@ -41,6 +41,7 @@ CASES = [
     "plain.webp", "meta.webp",
     "plain.gif", "meta.gif",
     "plain.avif", "meta.avif",
+    "plain.tif", "meta.tif", "multipage.tif",
 ]
 
 
@@ -195,27 +196,28 @@ def tiff_check(name: str, src: Path, out: Path) -> list[str]:
         return [f"{name}: missing stripped output"]
 
     try:
-        before, before_size = pixels(src)
-        after, after_size = pixels(out)
+        with Image.open(src) as before_image:
+            before = [(frame.size, frame.convert("RGB").tobytes()) for frame in ImageSequence.Iterator(before_image)]
+        with Image.open(out) as after_image:
+            after = [(frame.size, frame.convert("RGB").tobytes()) for frame in ImageSequence.Iterator(after_image)]
+            pages = []
+            for index, frame in enumerate(ImageSequence.Iterator(after_image)):
+                pages.append((index, dict(frame.tag_v2), len(frame.getexif().get_ifd(0x8769))))
     except Exception as exc:  # noqa: BLE001
         return [f"{name}: output does not decode ({exc!r})"]
-    if before_size != after_size:
-        problems.append(f"{name}: geometry changed {before_size} -> {after_size}")
+
+    if len(before) != len(after):
+        problems.append(f"{name}: page count changed {len(before)} -> {len(after)}")
     elif before != after:
         problems.append(f"{name}: pixels changed after stripping")
 
-    try:
-        with Image.open(out) as im:
-            tags = dict(im.tag_v2)
-            sub_ifds = len(im.getexif().get_ifd(0x8769))
-    except Exception as exc:  # noqa: BLE001
-        return [f"{name}: output does not decode ({exc!r})"]
-
-    for tag, label in TIFF_PRIVATE_TAGS.items():
-        if tag in tags:
-            problems.append(f"{name}: {label} (0x{tag:04x}) survived")
-    if sub_ifds:
-        problems.append(f"{name}: Exif sub-IFD still contains {sub_ifds} tags")
+    for index, tags, sub_ifd_tags in pages:
+        where = f"{name} (page {index})" if len(pages) > 1 else name
+        for tag, label in TIFF_PRIVATE_TAGS.items():
+            if tag in tags:
+                problems.append(f"{where}: {label} (0x{tag:04x}) survived")
+        if sub_ifd_tags:
+            problems.append(f"{where}: Exif sub-IFD still contains {sub_ifd_tags} tags")
 
     data = out.read_bytes()
     for marker, label in (

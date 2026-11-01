@@ -82,6 +82,28 @@
       "finding.gps"
     ]
   },
+  "plain.tif": {
+    "format": "tiff",
+    "findings": []
+  },
+  "meta.tif": {
+    "format": "tiff",
+    "findings": [
+      "finding.tiff.tags",
+      "finding.xmp",
+      "finding.xmp.thumbnail",
+      "finding.iptc"
+    ]
+  },
+  "multipage.tif": {
+    "format": "tiff",
+    "findings": [
+      "finding.tiff.tags",
+      "finding.xmp",
+      "finding.xmp.thumbnail",
+      "finding.iptc"
+    ]
+  },
   "plain.gif": {
     "format": "gif",
     "findings": []

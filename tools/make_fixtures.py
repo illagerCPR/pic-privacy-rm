@@ -599,6 +599,47 @@ def main() -> None:
     except Exception as exc:  # noqa: BLE001
         print(f"  ! AVIF fixtures skipped ({exc}); keeping the committed files")
 
+    # ---------------- TIFF ----------------
+    # No metadata segment here: descriptive tags share the image directory with
+    # the tags that describe the pixels, so these fixtures exercise the rebuild
+    # (striped + IPTC + XMP), the already-clean case, and a directory chain.
+
+    def iim(record: int, dataset: int, text: str) -> bytes:
+        body = text.encode("latin-1")
+        return bytes([0x1C, record, dataset]) + len(body).to_bytes(2, "big") + body
+
+    iptc = iim(2, 80, "Alice Example") + iim(2, 90, "Barcelona") + iim(2, 25, "terrace")
+    tiff_info = {
+        270: "Terrace at dusk",
+        271: "NIKON",
+        272: "Z 6_2",
+        305: "PhotoMechanic 6",
+        306: "2024:05:06 19:24:10",
+        315: "Alice Example",
+        33432: "(c) Alice 2024",  # 0x8298 Copyright; 8298 would be tag 0x206a
+        700: XMP_PACKET,
+        33723: iptc,
+    }
+
+    tiff_plain_buf = io.BytesIO()
+    base_image().save(tiff_plain_buf, "TIFF", compression="tiff_lzw")
+    write("plain.tif", tiff_plain_buf.getvalue())
+
+    tiff_meta_buf = io.BytesIO()
+    base_image().save(tiff_meta_buf, "TIFF", compression="tiff_lzw", tiffinfo=dict(tiff_info))
+    write("meta.tif", tiff_meta_buf.getvalue())
+
+    tiff_pages_buf = io.BytesIO()
+    base_image((40, 30)).save(
+        tiff_pages_buf,
+        "TIFF",
+        save_all=True,
+        append_images=[base_image((40, 30))],
+        compression="tiff_lzw",
+        tiffinfo=dict(tiff_info),
+    )
+    write("multipage.tif", tiff_pages_buf.getvalue())
+
     # ---------------- Unsupported / broken inputs ----------------
     write("note.txt", b"this is not an image\n")
     write("fake.heic", b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00heicmif1" + b"\x00" * 32)
@@ -618,6 +659,9 @@ def main() -> None:
         "meta.webp": {"format": "webp", "findings": ["finding.exif", "finding.gps", "finding.exif.thumbnail", "finding.xmp", "finding.c2pa", "finding.orientation"]},
         "plain.avif": {"format": "avif", "findings": []},
         "meta.avif": {"format": "avif", "findings": ["finding.exif", "finding.gps"]},
+        "plain.tif": {"format": "tiff", "findings": []},
+        "meta.tif": {"format": "tiff", "findings": ["finding.tiff.tags", "finding.xmp", "finding.xmp.thumbnail", "finding.iptc"]},
+        "multipage.tif": {"format": "tiff", "findings": ["finding.tiff.tags", "finding.xmp", "finding.xmp.thumbnail", "finding.iptc"]},
         "plain.gif": {"format": "gif", "findings": []},
         "meta.gif": {"format": "gif", "findings": ["finding.xmp", "finding.comment.gif"]},
     }

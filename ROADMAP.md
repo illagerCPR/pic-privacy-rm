@@ -23,8 +23,8 @@
 
 七种格式的无损引擎（JPEG / PNG / WebP / GIF、共用 ISOBMFF 栈的 HEIC / AVIF，以及 TIFF）、双语界面、
 单张与批量、方向烘焙开关、service worker 离线、CI 与 Pages 自动部署；「全部元数据」视图（全量 EXIF /
-XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **126 个单测（CI）+ 32 个
-真实样本用例（本地）+ 12 个 Chrome e2e**，外加 `pnpm verify` 独立复核 43 个输出文件与离线断言。
+XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **137 个单测（CI）+ 32 个
+真实样本用例（本地）+ 13 个 Chrome e2e**，外加 `pnpm verify` 独立复核 46 个输出文件与离线断言。
 
 **TIFF（原低优先级项，已交付）**：`src/core/tiff-image.ts` 不解析像素，只重建目录——按白名单留下
 结构标签，把条带（或瓦片）原样重排、重写 `StripOffsets` / `TileOffsets`，像素码流逐字节复制，

@@ -28,7 +28,8 @@ function assertClean(name: string, bytes: Uint8Array) {
   const isPng = magic[0] === 0x89 && magic[1] === 0x50;
   const isWebp = Buffer.from(bytes.subarray(0, 4)).toString('latin1') === 'RIFF';
   const isGif = Buffer.from(bytes.subarray(0, 3)).toString('latin1') === 'GIF';
-  expect(isJpeg || isPng || isWebp || isGif, `${name} has an unknown signature`).toBe(true);
+  const isTiff = magic[0] === 0x49 && magic[1] === 0x49 && (magic[2] === 0x2a || magic[2] === 0x2b) && magic[3] === 0x00;
+  expect(isJpeg || isPng || isWebp || isGif || isTiff, `${name} has an unknown signature`).toBe(true);
 }
 
 test.beforeAll(() => {
@@ -102,6 +103,53 @@ test('scans, strips and packages images entirely in the browser', async ({ page 
 
   expect(externalRequests, `unexpected external requests: ${externalRequests.join(', ')}`).toEqual([]);
   expect(consoleErrors).toEqual([]);
+});
+
+test('cleans a multi-page TIFF and keeps every page', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [
+    join(fixtures, 'meta.tif'),
+    join(fixtures, 'multipage.tif'),
+  ]);
+
+  const rows = page.locator('.file-row');
+  await expect(rows).toHaveCount(2);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  // Browsers cannot decode TIFF, so the thumbnail degrades to an icon — with a
+  // hint that cleaning still works.
+  const tiffRow = page.locator('.file-row', { hasText: 'meta.tif' });
+  await expect(tiffRow.locator('.thumb img')).toHaveCount(0);
+  await expect(tiffRow.locator('.thumb')).toHaveAttribute('title', /无法预览 TIFF/);
+  await expect(tiffRow.getByText('EXIF', { exact: true })).toBeVisible();
+
+  // The metadata drawer lists the descriptive tags the rebuild will drop.
+  await tiffRow.locator('button[aria-label^="查看详情"]').click();
+  const drawer = page.locator('.drawer');
+  await expect(drawer).toContainText('Alice Example');
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done')).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.getByText('复检通过').first()).toBeVisible();
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '下载全部 (.zip)' }).click();
+  const download = await downloadPromise;
+  const zipPath = join(outDir, 'tiff.zip');
+  await download.saveAs(zipPath);
+  const archive = unzipSync(new Uint8Array(readFileSync(zipPath)));
+  expect(Object.keys(archive).sort()).toEqual(['meta-clean.tif', 'multipage-clean.tif']);
+
+  for (const [name, bytes] of Object.entries(archive)) {
+    assertClean(name, bytes);
+    const text = Buffer.from(bytes).toString('latin1');
+    for (const marker of ['Alice Example', 'Terrace at dusk', 'x:xmpmeta', 'Barcelona']) {
+      expect(text.includes(marker), `${name} still contains ${JSON.stringify(marker)}`).toBe(false);
+    }
+    writeFileSync(join(outDir, name), bytes);
+  }
 });
 
 test('switches language and keeps the layout intact', async ({ page }) => {

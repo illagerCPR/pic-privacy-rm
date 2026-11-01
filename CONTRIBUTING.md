@@ -77,7 +77,7 @@ src/components/ UI
 
 Three independent layers, because a metadata remover that lies is worse than no tool at all:
 
-1. **Synthetic fixtures** (`tools/make_fixtures.py`) build JPEG/PNG/WebP/GIF files with REAL structures:
+1. **Synthetic fixtures** (`tools/make_fixtures.py`) build JPEG/PNG/WebP/GIF/HEIC/AVIF/TIFF files with REAL structures:
    EXIF with GPS and an IFD1 thumbnail, XMP with a base64 thumbnail, IPTC-IIM, JFXX, MPF, C2PA/JUMBF with a
    real self-signed certificate and split APP11 segments, plus broken and unsupported inputs.
 2. **Round-trip tests** (`tests/roundtrip.test.ts`) assert the findings, strip every fixture, re-scan the
@@ -88,7 +88,8 @@ Three independent layers, because a metadata remover that lies is worse than no 
    reasons: Pillow cannot open HEIC at all, and for AVIF it *synthesises* an `Exif` block from the
    container's `irot` — a stripped file then reports an orientation tag that is not in its bytes. The
    HEIC sample ExifTool ships has a stub codec payload, so for that one the container's declared stream
-   layout is compared rather than pixels.
+   layout is compared rather than pixels. TIFF gets its own check: Pillow's `getexif()` returns IFD0
+   there, so the tags are audited against an allow-list and every page's pixels are compared.
 4. **End-to-end tests** (`e2e/`) drive the real UI in Chrome: upload, inspect the drawer, clean, download
    the ZIP and inspect its bytes; check orientation baking and the pre-clean orientation warning; open the
    all-metadata tab, expand a MakerNote hex dump and compare the listing against the cleaned output; assert
@@ -99,6 +100,10 @@ Three independent layers, because a metadata remover that lies is worse than no 
    `pnpm test && pnpm verify` will clean them and decode the output with Pillow. `pnpm real` fetches a
    fixed set of public samples from ExifTool's corpus (commit plus per-file SHA-256 in
    `tools/real-images.json`), so the same coverage is one command away. CI skips this layer.
+
+Re-running `tools/make_fixtures.py` regenerates every binary, and a different Pillow version has drifted
+files nobody touched (`broken.jpg`, `meta.jpg`, `meta.png`, `meta.webp`). Keep the diff to what you meant to
+change: `git checkout --` the rest.
 
 ## Adding a format
 
@@ -158,6 +163,29 @@ HEIF-specific traps, all of which produced a broken file at least once:
   evidence of leftover metadata there. Look at the bytes (`Exif\0\0`, `x:xmpmeta`) instead.
 - A `moov` box means an image sequence (`avis`, live photos). It is refused outright rather than stripped:
   dropping it would leave an animation that no longer plays.
+
+TIFF-specific traps, in the order they bit:
+
+- A TIFF has no metadata segment. Descriptive tags sit in the same image file directory as `StripOffsets`,
+  so the strip pass is a directory rebuild: keep the structural entries, drop the rest, re-lay the strips
+  and rewrite the offset table. There is nothing here you can skip past.
+- Pillow's `getexif()` on a TIFF returns IFD0 itself, so a "no EXIF left" assertion can never pass for a
+  stripped file. `tools/verify.py` checks a tag allow-list instead: structural tags must survive, private
+  ones must not.
+- Compute offsets and write bytes from the same layout object. Forgetting the one-byte alignment pad
+  between the value area and the image data shifts every strip by one; only the last strip falls off the
+  end of the file, so the symptom is a "bad offset table" rather than "misplaced data", and unit tests with
+  even-length strips cannot see it.
+- `NewSubfileType` bit 0 marks a reduced-resolution directory: a thumbnail, not a page. Leave it and the
+  cleaned file still carries a second copy of the picture.
+- Compression 7 means every strip is its own JPEG stream (tables live in tag `0x015b`), so each strip has to
+  go through the JPEG engine or its APPn survives. Compression 6 hides the stream behind tag `0x0201` and is
+  refused instead of guessed at.
+- Magic 42 is not enough to identify a file: BigTIFF uses 43, and DNG/CR2/NEF/ARW raws wear the same header.
+  Recognise them, then refuse them — a "clean" would turn a raw into a broken file.
+- Pillow's TIFF writer only writes what it needs. `282`/`283`/`296`/`254`/`317` are often absent from the
+  source, so "present before, missing after" is not automatically a regression: compare against the source's
+  own tag set.
 
 ## Commits
 
