@@ -4,6 +4,7 @@ import type { MetadataReport } from '../core/metadata.ts';
 import type { RemovalEntry, ScanResult, StripOptions, VerifyResult } from '../core/types.ts';
 import { DEFAULT_STRIP_OPTIONS } from '../core/types.ts';
 import { bakeOrientation } from '../lib/bake.ts';
+import { createToken, runBatch, type BatchToken } from '../lib/batch.ts';
 import { archiveName, buildZip, downloadBlob } from '../lib/download.ts';
 import { buildReport, reportFileName } from '../lib/report.ts';
 import { looksLikeImage, outputName, sortFilesByName, uniqueName } from '../lib/files.ts';
@@ -105,12 +106,18 @@ export interface Workspace {
   setBake: (value: boolean) => void;
   busy: boolean;
   progress: { done: number; total: number } | null;
+  /** True once a batch has been asked to stop but a file is still finishing. */
+  cancelling: boolean;
+  cancelBatch: () => void;
 }
 
 export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Workspace {
   const [items, setItems] = useState<Item[]>([]);
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const batchRef = useRef<BatchToken | null>(null);
   const itemsRef = useRef<Item[]>([]);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -263,10 +270,17 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   const inspectResult = useCallback((id: string) => runInspect(id, 'out'), [runInspect]);
 
   const stripOne = useCallback(
-    async (item: Item) => {
-      patchItem(item.id, { state: 'stripping', error: undefined });
+    async (item: Item, token?: BatchToken): Promise<boolean> => {
       try {
-        const outcome = await stripLimit(() => pipeline.strip(item.file, settingsRef.current.options));
+        const outcome = await stripLimit(async () => {
+          // Cancellation is checked once the limiter hands us a slot: before
+          // that, every queued item looks at a token nobody has set yet.
+          if (token?.cancelled) return null;
+          patchItem(item.id, { state: 'stripping', error: undefined });
+          return pipeline.strip(item.file, settingsRef.current.options);
+        });
+        // Cancelled while queued: leave the row exactly as it was.
+        if (!outcome) return false;
         let { blob } = outcome.result;
         let mime = outcome.result.mime;
         let ext = outcome.result.ext;
@@ -298,12 +312,14 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
         inspectCache.current.delete(`${item.id}:out`);
         if (!verify.ok) {
           patchItem(item.id, { state: 'failed', error: 'error.verifyFailed', result });
-          return;
+          return true;
         }
         patchItem(item.id, { state: 'done', result });
+        return true;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'error.stripFailed';
         patchItem(item.id, { state: 'failed', error: message });
+        return true;
       }
     },
     [patchItem, pipeline, stripLimit],
@@ -321,18 +337,27 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   const stripAll = useCallback(async () => {
     const targets = itemsRef.current.filter((item) => item.state === 'ready' || item.state === 'failed');
     if (targets.length === 0) return;
+    const token = createToken();
+    batchRef.current = token;
+    setBatchRunning(true);
+    setCancelling(false);
     setProgress({ done: 0, total: targets.length });
-    let done = 0;
-    // stripOne() itself goes through the shared limiter; do not nest another one
+    // stripOne() goes through the shared limiter itself; do not nest another one
     // (two outer holders would each wait for an inner slot and deadlock).
-    await Promise.all(
-      targets.map(async (item) => {
-        await stripOne(item);
-        done += 1;
-        setProgress({ done, total: targets.length });
-      }),
+    const outcome = await runBatch(
+      targets,
+      (item, batchToken) => stripOne(item, batchToken),
+      token,
+      (next) => setProgress(next),
     );
+    batchRef.current = null;
+    setBatchRunning(false);
+    setCancelling(false);
     setProgress(null);
+    if (token.cancelled) {
+      notify('toast.batchCancelled', { n: outcome.done, left: outcome.skipped });
+      return;
+    }
     const finished = itemsRef.current.filter((item) => item.state === 'done').length;
     notify('toast.done', { n: finished });
     // The default path drops the orientation tag; say so instead of leaving the
@@ -343,6 +368,18 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     ).length;
     if (sideways > 0) notify('toast.orientationLost', { n: sideways });
   }, [notify, stripLimit, stripOne]);
+
+  /**
+   * Stop the queue, not the file already in flight: that one finishes and is
+   * still verified, because a half-cleaned row would be a lie either way.
+   */
+  const cancelBatch = useCallback(() => {
+    const token = batchRef.current;
+    if (!token || token.cancelled) return;
+    token.cancelled = true;
+    setCancelling(true);
+    notify('toast.cancelRequested');
+  }, [notify]);
 
   /** A clean file still gets a downloadable copy, byte-identical to the input. */
   const passthroughResult = useCallback((item: Item): ItemResult => {
@@ -425,7 +462,10 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     setSettings((prev) => ({ ...prev, bake: value }));
   }, []);
 
-  const busy = items.some((item) => item.state === 'scanning' || item.state === 'stripping');
+  // A queued batch counts as busy even before the first file starts, otherwise
+  // the toolbar offers a second run while the first one is still waiting.
+  const busy =
+    batchRunning || items.some((item) => item.state === 'scanning' || item.state === 'stripping');
 
   return {
     items,
@@ -445,5 +485,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     setBake,
     busy,
     progress,
+    cancelling,
+    cancelBatch,
   };
 }

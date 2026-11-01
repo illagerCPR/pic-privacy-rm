@@ -180,6 +180,8 @@ export default function App() {
               onStripAll={() => void workspace.stripAll()}
               onDownloadAll={() => void workspace.downloadAll()}
               onClear={workspace.clear}
+              onCancelBatch={workspace.cancelBatch}
+              cancelling={workspace.cancelling}
               busy={workspace.busy}
               progress={workspace.progress}
               canStripAll={canStripAll}

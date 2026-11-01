@@ -152,6 +152,38 @@ test('cleans a multi-page TIFF and keeps every page', async ({ page }) => {
   }
 });
 
+test('stops a running batch without leaving the queue stuck', async ({ page }) => {
+  await page.goto('/');
+  // Enough files that the batch is still running when the cancel lands.
+  await page.setInputFiles(
+    'input[type=file] >> nth=0',
+    Array.from({ length: 20 }, () => join(fixtures, 'multipage.tif')),
+  );
+  await expect(page.locator('.file-row')).toHaveCount(20);
+  await expect(page.locator('.file-row--ready')).toHaveCount(20, { timeout: 30_000 });
+
+  await page.getByRole('button', { name: '全部清理' }).click();
+  const cancel = page.getByRole('button', { name: '取消批量清理' });
+  await cancel.click();
+  await expect(page.locator('.toasts')).toContainText('已停止排队');
+
+  // The batch must drain: no row left claiming to be mid-strip, no progress bar
+  // left behind, and the files that never started still say "待清理".
+  await expect(page.locator('.file-row--stripping')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator('.progress')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator('.toasts')).toContainText('批量清理已取消', { timeout: 30_000 });
+
+  const done = await page.locator('.file-row--done').count();
+  const ready = await page.locator('.file-row--ready').count();
+  expect(done + ready).toBe(20);
+  expect(ready, 'cancelling should leave the queued files untouched').toBeGreaterThan(0);
+
+  // A cancelled batch is not a dead end: the rest can be cleaned afterwards.
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done')).toHaveCount(20, { timeout: 60_000 });
+  await expect(page.getByText('复检通过').first()).toBeVisible();
+});
+
 test('switches language and keeps the layout intact', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'EN' }).click();

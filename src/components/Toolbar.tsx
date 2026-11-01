@@ -22,6 +22,8 @@ interface Props {
   onStripAll: () => void;
   onDownloadAll: () => void;
   onClear: () => void;
+  onCancelBatch: () => void;
+  cancelling: boolean;
   busy: boolean;
   progress: { done: number; total: number } | null;
   canStripAll: boolean;
@@ -113,6 +115,14 @@ export function Toolbar(props: Props) {
           <span className="progress-text">
             {progress.done} / {progress.total}
           </span>
+          <button
+            type="button"
+            className="btn btn--quiet btn--sm"
+            onClick={props.onCancelBatch}
+            disabled={props.cancelling}
+          >
+            {props.cancelling ? t('status.cancelling') : t('actions.cancelBatch')}
+          </button>
         </div>
       )}
 
