@@ -23,7 +23,7 @@
 
 七种格式的无损引擎（JPEG / PNG / WebP / GIF、共用 ISOBMFF 栈的 HEIC / AVIF，以及 TIFF）、双语界面、
 单张与批量、方向烘焙开关、service worker 离线、CI 与 Pages 自动部署；「全部元数据」视图（全量 EXIF /
-XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **152 个单测（CI）+ 32 个
+XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **156 个单测（CI）+ 32 个
 真实样本用例（本地）+ 17 个 Chrome e2e**，外加 `pnpm verify` 独立复核 46 个输出文件与离线断言。
 
 **可访问性与批量报告**：详情抽屉改为真正的模态对话框——打开即把焦点移入面板、Tab / Shift+Tab 在

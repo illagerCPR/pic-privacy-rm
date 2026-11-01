@@ -13,6 +13,7 @@
  * each image a second time. The one pass we do make over the bytes is the
  * CRC-32 the format requires.
  */
+import { crc32 } from '../core/crc32.ts';
 
 export interface ZipEntry {
   /** Member path inside the archive. */
@@ -62,32 +63,6 @@ const MAX_ENTRIES = 0xffff;
 const MAX_U32 = 0xffffffff;
 const READ_CHUNK = 4 * 1024 * 1024;
 
-/**
- * Slicing-by-8 tables: eight bytes per round, roughly 2.5x the byte-at-a-time
- * loop. A 2 GB batch is otherwise seconds of pure arithmetic.
- */
-const CRC_TABLES = (() => {
-  const base = new Uint32Array(256);
-  for (let index = 0; index < 256; index += 1) {
-    let value = index;
-    for (let bit = 0; bit < 8; bit += 1) {
-      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-    }
-    base[index] = value >>> 0;
-  }
-  const tables = [base];
-  for (let slice = 1; slice < 8; slice += 1) {
-    const previous = tables[slice - 1]!;
-    const next = new Uint32Array(256);
-    for (let index = 0; index < 256; index += 1) {
-      const value = previous[index]!;
-      next[index] = ((value >>> 8) ^ base[value & 0xff]!) >>> 0;
-    }
-    tables.push(next);
-  }
-  return tables;
-})();
-
 function encodeName(name: string): Uint8Array {
   if (name.length === 0) throw new ZipError('bad-name', 'empty');
   if (name.includes('\0')) throw new ZipError('bad-name', name);
@@ -115,41 +90,14 @@ function zipHeader(size: number): { bytes: Uint8Array<ArrayBuffer>; view: DataVi
 
 /** CRC-32 of a Blob, read in chunks so peak memory stays at one chunk. */
 async function crc32Of(blob: Blob, onBytes: (count: number) => void): Promise<number> {
-  const [t0, t1, t2, t3, t4, t5, t6, t7] = CRC_TABLES as [
-    Uint32Array,
-    Uint32Array,
-    Uint32Array,
-    Uint32Array,
-    Uint32Array,
-    Uint32Array,
-    Uint32Array,
-    Uint32Array,
-  ];
-  let crc = 0xffffffff;
+  let crc = 0;
   for (let offset = 0; offset < blob.size; offset += READ_CHUNK) {
     const end = Math.min(offset + READ_CHUNK, blob.size);
     const chunk = new Uint8Array(await blob.slice(offset, end).arrayBuffer());
-    const whole = chunk.length - (chunk.length % 8);
-    let index = 0;
-    for (; index < whole; index += 8) {
-      crc ^= chunk[index]! | (chunk[index + 1]! << 8) | (chunk[index + 2]! << 16) | (chunk[index + 3]! << 24);
-      crc =
-        (t7[crc & 0xff]! ^
-          t6[(crc >>> 8) & 0xff]! ^
-          t5[(crc >>> 16) & 0xff]! ^
-          t4[crc >>> 24]! ^
-          t3[chunk[index + 4]!]! ^
-          t2[chunk[index + 5]!]! ^
-          t1[chunk[index + 6]!]! ^
-          t0[chunk[index + 7]!]!) >>>
-        0;
-    }
-    for (; index < chunk.length; index += 1) {
-      crc = ((crc >>> 8) ^ t0[(crc ^ chunk[index]!) & 0xff]!) >>> 0;
-    }
+    crc = crc32(chunk, crc);
     onBytes(chunk.length);
   }
-  return (crc ^ 0xffffffff) >>> 0;
+  return crc;
 }
 
 /**

@@ -134,6 +134,17 @@ with zipfile.ZipFile(sys.argv[1]) as handle:
     expect(total).toBe(new Blob(parts).size);
   });
 
+  it('checksums a member that spans several read chunks', async () => {
+    const big = new Uint8Array(9 * 1024 * 1024);
+    for (let index = 0; index < big.length; index += 1) big[index] = (index * 31) & 0xff;
+    const archive = new Uint8Array(
+      await (await buildZip([{ name: 'big.bin', blob: blobOf(big) }])).arrayBuffer(),
+    );
+    const [member] = readArchive(archive);
+    expect(member?.size).toBe(big.length);
+    expect(member?.crc).toBe(crc32(Buffer.from(big)));
+  });
+
   it('reports progress per member', async () => {
     const seen: number[] = [];
     await buildZip(entries, (progress) => {
