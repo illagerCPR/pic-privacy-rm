@@ -161,8 +161,23 @@ export const GPS_TAGS: Record<number, string> = {
   0x001f: 'GPSHPositioningError',
 };
 
-export function tagName(kind: 'tiff' | 'exif' | 'gps', tag: number): string {
-  const map = kind === 'gps' ? GPS_TAGS : kind === 'exif' ? EXIF_TAGS : TIFF_TAGS;
+export const INTEROP_TAGS: Record<number, string> = {
+  0x0001: 'InteropIndex',
+  0x0002: 'InteropVersion',
+  0x1000: 'RelatedImageFileFormat',
+  0x1001: 'RelatedImageWidth',
+  0x1002: 'RelatedImageLength',
+};
+
+export function tagName(kind: 'tiff' | 'exif' | 'gps' | 'interop', tag: number): string {
+  const map =
+    kind === 'gps'
+      ? GPS_TAGS
+      : kind === 'exif'
+        ? EXIF_TAGS
+        : kind === 'interop'
+          ? INTEROP_TAGS
+          : TIFF_TAGS;
   const name = map[tag];
   return name ?? `Tag0x${tag.toString(16).padStart(4, '0')}`;
 }
