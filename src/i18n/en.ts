@@ -274,6 +274,7 @@ export const en: Dict = {
   'warn.heif.rebuildFailed': 'Could not rebuild the HEIF container',
   'warn.heif.tableMismatch': 'Item and location tables disagree ({info} / {loc})',
   'warn.heif.exifUnparsed': 'The Exif item is malformed; it is still removed in full',
+  'warn.heif.sequence': 'This is an image sequence (animated AVIF/HEIC), which is not supported yet',
   'warn.heif.orientationLost': 'Orientation lives only in EXIF ({orientation}) and will be lost',
   'notice.heif.preview': 'Browsers cannot preview HEIC; cleaning and download are unaffected',
 

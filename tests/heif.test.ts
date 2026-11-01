@@ -86,8 +86,16 @@ function infe(id: number, type: string, name: string, contentType?: string): Uin
 }
 
 interface Layout {
+  /**
+   * Container brand to write. `heic` is the default; `avif` uses the AVIF item
+   * type, and `mif1-avif` is an AVIF that only declares itself in the
+   * compatibility list.
+   */
+  brand?: 'heic' | 'avif' | 'mif1-avif';
   ilocVersion?: number;
   baseOffsetSize?: number;
+  /** Extra top-level boxes inserted between `ftyp` and `meta`. */
+  extraTop?: Uint8Array[];
   /** Item ids that live in `idat` via construction_method 1. */
   idatItems?: Set<number>;
   extraItems?: { info: Uint8Array; id: number; payload: Uint8Array }[];
@@ -111,8 +119,11 @@ function buildHeif(layout: Layout = {}): Built {
   const exif = exifItemPayload();
   const xmp = ascii(XMP_TEXT);
 
+  const brand = layout.brand ?? 'heic';
+  const isAvif = brand === 'avif' || brand === 'mif1-avif';
+  const imageType = isAvif ? 'av01' : 'hvc1';
   const items: { id: number; info: Uint8Array; payload: Uint8Array; inIdat: boolean }[] = [
-    { id: 1, info: infe(1, 'hvc1', ''), payload: image, inIdat: layout.idatItems?.has(1) ?? false },
+    { id: 1, info: infe(1, imageType, ''), payload: image, inIdat: layout.idatItems?.has(1) ?? false },
     { id: 2, info: infe(2, 'Exif', ''), payload: exif, inIdat: layout.idatItems?.has(2) ?? false },
     { id: 3, info: infe(3, 'mime', 'xmp', 'application/rdf+xml'), payload: xmp, inIdat: layout.idatItems?.has(3) ?? false },
     ...(layout.extraItems ?? []).map((extra) => ({
@@ -173,7 +184,12 @@ function buildHeif(layout: Layout = {}): Built {
     return fullBox('meta', 0, 0, ...children);
   };
 
-  const ftyp = box('ftyp', ascii('heic'), u32(0), ascii('mif1'), ascii('heic'));
+  const ftyp =
+    brand === 'avif'
+      ? box('ftyp', ascii('avif'), u32(0), ascii('mif1'), ascii('miaf'), ascii('MA1B'))
+      : brand === 'mif1-avif'
+        ? box('ftyp', ascii('mif1'), u32(0), ascii('mif1'), ascii('miaf'), ascii('avif'))
+        : box('ftyp', ascii('heic'), u32(0), ascii('mif1'), ascii('heic'));
   const idatPayload = items.filter((item) => item.inIdat).length > 0
     ? concat(items.filter((item) => item.inIdat).map((item) => item.payload))
     : null;
@@ -186,10 +202,12 @@ function buildHeif(layout: Layout = {}): Built {
     }
   }
 
+  const extraTop = layout.extraTop ?? [];
+  const extraTopSize = extraTop.reduce((sum, part) => sum + part.length, 0);
   const probe = buildMeta(new Map(), idatOffsets, idatPayload);
   const offsets = new Map<number, number>();
-  // ftyp + meta + the 8-byte mdat header, then the payload in declaration order.
-  let cursor = ftyp.length + probe.length + 8;
+  // ftyp + extra top boxes + meta + the 8-byte mdat header, then the payload.
+  let cursor = ftyp.length + extraTopSize + probe.length + 8;
   for (const item of items.filter((entry) => !entry.inIdat)) {
     offsets.set(item.id, cursor);
     cursor += item.payload.length;
@@ -202,7 +220,7 @@ function buildHeif(layout: Layout = {}): Built {
   const mdatPayload = items.filter((item) => !item.inIdat).map((item) => item.payload);
 
   return {
-    bytes: concat([ftyp, meta, box('mdat', ...mdatPayload)]),
+    bytes: concat([ftyp, ...extraTop, meta, box('mdat', ...mdatPayload)]),
     imagePayload: image,
     exifPayload: exif,
     xmpPayload: xmp,
@@ -309,12 +327,53 @@ describe('heif stripping', () => {
     expect(structure!.items.some((item) => item.info.type === 'zzzz')).toBe(false);
   });
 
+  it('refuses an image sequence instead of half-cleaning it', async () => {
+    // A `moov` box means the file is an animation; dropping it would leave
+    // something that no longer plays, so such files are rejected outright.
+    const { bytes } = buildHeif({ extraTop: [box('moov', new Uint8Array(16))] });
+    const result = await scan(bytes);
+    expect(result.supported).toBe(true);
+    expect(result.warnings.some((warning) => warning.id === 'warn.heif.sequence')).toBe(true);
+    await expect(stripSource(sourceFromBytes(bytes))).rejects.toThrow();
+  });
+
   it('leaves a container without metadata intact', async () => {
     const { bytes } = buildHeif();
     const stripped = await stripSource(sourceFromBytes(bytes));
     const out = new Uint8Array(await stripped.blob.arrayBuffer());
     const top = readBoxes(out, 0, out.length);
     expect(top.map((entry) => entry.type)).toEqual(['ftyp', 'meta', 'mdat']);
+  });
+});
+
+describe('avif', () => {
+  it('reports the AVIF container, not HEIC', async () => {
+    const { bytes } = buildHeif({ brand: 'avif' });
+    const result = await scan(bytes);
+    expect(result.format).toBe('avif');
+    expect(result.supported).toBe(true);
+  });
+
+  it('strips AVIF metadata and keeps the container AVIF', async () => {
+    const { bytes, imagePayload } = buildHeif({ brand: 'avif' });
+    const stripped = await stripSource(sourceFromBytes(bytes));
+    expect(stripped.format).toBe('avif');
+    expect(stripped.mime).toBe('image/avif');
+    expect(stripped.ext).toBe('avif');
+    const out = new Uint8Array(await stripped.blob.arrayBuffer());
+    const structure = await readHeifStructure(sourceFromBytes(out));
+    expect(structure!.format.format).toBe('avif');
+    const imageItem = structure!.items.find((item) => item.info.id === 1)!;
+    expect(out.subarray(imageItem.start, imageItem.start + imageItem.length)).toEqual(imagePayload);
+    const verify = await verifyBlob(stripped.blob, 'avif');
+    expect(verify.ok).toBe(true);
+  });
+
+  it('recognises the generic mif1 brand holding AVIF', async () => {
+    // Files whose major brand is the generic HEIF one rely on the compat list.
+    const { bytes } = buildHeif({ brand: 'mif1-avif' });
+    const result = await scan(bytes);
+    expect(result.format).toBe('avif');
   });
 });
 

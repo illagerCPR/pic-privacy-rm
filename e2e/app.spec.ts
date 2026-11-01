@@ -123,14 +123,12 @@ test('refuses a container it cannot read instead of calling it clean', async ({ 
 });
 
 test('refuses unsupported formats without pretending to clean them', async ({ page }) => {
-  // AVIF shares the HEIF container but is not a supported format yet.
-  const avif = new Uint8Array(32);
-  avif.set([0, 0, 0, 0x20], 0);
-  avif.set(new TextEncoder().encode('ftypavif'), 4);
-  avif.set(new TextEncoder().encode('mif1'), 16);
+  // BMP is still in the "reported, never half-cleaned" bucket.
+  const bmp = new Uint8Array(64);
+  bmp.set([0x42, 0x4d], 0);
   mkdirSync(outDir, { recursive: true });
-  const path = join(outDir, 'fake.avif');
-  writeFileSync(path, avif);
+  const path = join(outDir, 'fake.bmp');
+  writeFileSync(path, bmp);
 
   await page.goto('/');
   await page.setInputFiles('input[type=file] >> nth=0', [path]);

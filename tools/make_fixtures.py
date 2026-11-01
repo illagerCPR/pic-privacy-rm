@@ -584,6 +584,21 @@ def main() -> None:
     gif_meta = gif_insert_before_trailer(gif_plain, [comment, xmp_ext, loop_ext])
     write("meta.gif", gif_meta)
 
+    # ---------------- AVIF ----------------
+    # Pillow writes AVIF through libavif, which stores EXIF as an `Exif` item —
+    # the same container shape as HEIC. XMP cannot be written this way, so the
+    # fixture exercises the EXIF path only.
+    try:
+        avif_plain_buf = io.BytesIO()
+        base_image((32, 24)).save(avif_plain_buf, "AVIF")
+        write("plain.avif", avif_plain_buf.getvalue())
+
+        avif_meta_buf = io.BytesIO()
+        base_image((32, 24)).save(avif_meta_buf, "AVIF", exif=tiff)
+        write("meta.avif", avif_meta_buf.getvalue())
+    except Exception as exc:  # noqa: BLE001
+        print(f"  ! AVIF fixtures skipped ({exc}); keeping the committed files")
+
     # ---------------- Unsupported / broken inputs ----------------
     write("note.txt", b"this is not an image\n")
     write("fake.heic", b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00heicmif1" + b"\x00" * 32)
@@ -601,6 +616,8 @@ def main() -> None:
         "meta.png": {"format": "png", "findings": ["finding.exif", "finding.gps", "finding.exif.thumbnail", "finding.xmp", "finding.c2pa", "finding.png.text", "finding.png.time", "finding.trailer", "finding.orientation"]},
         "plain.webp": {"format": "webp", "findings": []},
         "meta.webp": {"format": "webp", "findings": ["finding.exif", "finding.gps", "finding.exif.thumbnail", "finding.xmp", "finding.c2pa", "finding.orientation"]},
+        "plain.avif": {"format": "avif", "findings": []},
+        "meta.avif": {"format": "avif", "findings": ["finding.exif", "finding.gps"]},
         "plain.gif": {"format": "gif", "findings": []},
         "meta.gif": {"format": "gif", "findings": ["finding.xmp", "finding.comment.gif"]},
     }

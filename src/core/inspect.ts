@@ -536,6 +536,7 @@ export async function inspectSource(src: Source, opts: InspectOptions): Promise<
       groups = await inspectGif(src);
       break;
     case 'heic':
+    case 'avif':
       groups = await inspectHeif(src);
       break;
     default:

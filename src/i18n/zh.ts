@@ -267,6 +267,7 @@ export const zh = {
   'warn.heif.rebuildFailed': '无法重建 HEIF 容器',
   'warn.heif.tableMismatch': '项目表与位置表不一致（{info} / {loc}）',
   'warn.heif.exifUnparsed': 'Exif 项目结构异常，仍会被完整删除',
+  'warn.heif.sequence': '这是图像序列（AVIF/HEIC 动画），暂不支持清理',
   'warn.heif.orientationLost': '方向只记录在 EXIF 中（{orientation}），清理后会丢失',
   'notice.heif.preview': '浏览器无法预览 HEIC，清理与下载不受影响',
 

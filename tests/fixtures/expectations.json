@@ -71,6 +71,17 @@
       "finding.orientation"
     ]
   },
+  "plain.avif": {
+    "format": "avif",
+    "findings": []
+  },
+  "meta.avif": {
+    "format": "avif",
+    "findings": [
+      "finding.exif",
+      "finding.gps"
+    ]
+  },
   "plain.gif": {
     "format": "gif",
     "findings": []

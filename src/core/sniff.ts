@@ -8,7 +8,7 @@ const FORMATS: Record<Format, { mime: string; ext: string; supported: boolean }>
   png: { mime: 'image/png', ext: 'png', supported: true },
   webp: { mime: 'image/webp', ext: 'webp', supported: true },
   gif: { mime: 'image/gif', ext: 'gif', supported: true },
-  avif: { mime: 'image/avif', ext: 'avif', supported: false },
+  avif: { mime: 'image/avif', ext: 'avif', supported: true },
   heic: { mime: 'image/heic', ext: 'heic', supported: true },
   tiff: { mime: 'image/tiff', ext: 'tif', supported: false },
   bmp: { mime: 'image/bmp', ext: 'bmp', supported: false },
@@ -42,7 +42,12 @@ export async function sniff(src: Source): Promise<FormatInfo> {
   }
   if (ascii(b, 4, 4) === 'ftyp') {
     const brand = ascii(b, 8, 4);
-    if (brand === 'avif' || brand === 'avis') return formatInfoOf('avif');
+    // `mif1` is the generic HEIF brand and can hold either codec, so the
+    // compatibility list decides before the major brand does.
+    const compatible = ascii(b, 16, Math.min(48, b.length - 16));
+    if (['avif', 'avis'].includes(brand) || compatible.includes('avif') || compatible.includes('avis')) {
+      return formatInfoOf('avif');
+    }
     if (['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return formatInfoOf('heic');
     return formatInfoOf('video');
   }

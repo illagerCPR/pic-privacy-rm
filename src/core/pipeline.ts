@@ -23,10 +23,10 @@ const ANALYSERS: Record<string, (src: Source, opts: StripOptions) => Promise<Con
   webp: analyzeWebp,
   gif: analyzeGif,
   heic: analyzeHeif,
+  avif: analyzeHeif,
 };
 
 const UNSUPPORTED_FORMAT_NAMES: Partial<Record<Format, string>> = {
-  avif: 'AVIF',
   tiff: 'TIFF',
   bmp: 'BMP',
   jxl: 'JPEG XL',

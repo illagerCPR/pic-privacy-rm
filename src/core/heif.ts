@@ -36,7 +36,7 @@ import {
 } from './isobmff.ts';
 import { readAt, type Source } from './source.ts';
 import { parseTiff } from './tiff.ts';
-import type { BlockInfo, ContainerAnalysis, Finding, Part, StripOptions, Warning } from './types.ts';
+import type { BlockInfo, ContainerAnalysis, Finding, Format, Part, StripOptions, Warning } from './types.ts';
 import { parseXmp } from './xmp.ts';
 
 /** Item types that carry picture data. Everything else is metadata. */
@@ -214,6 +214,8 @@ export interface HeifItem {
 
 export interface HeifStructure {
   top: TopLevel;
+  /** HEIC or AVIF, decided from the `ftyp` brands rather than the file name. */
+  format: HeifFormat;
   metaBytes: Uint8Array;
   parts: MetaParts;
   iinfVersion: number;
@@ -222,6 +224,29 @@ export interface HeifStructure {
   refs: ItemReference[];
   associations: { version: number; flags: number; items: { id: number; associations: PropertyAssociation[] }[] };
   primary: number | undefined;
+}
+
+export interface HeifFormat {
+  format: Format;
+  mime: string;
+  ext: string;
+}
+
+const HEIC_FORMAT: HeifFormat = { format: 'heic', mime: 'image/heic', ext: 'heic' };
+const AVIF_FORMAT: HeifFormat = { format: 'avif', mime: 'image/avif', ext: 'avif' };
+
+/**
+ * HEIC and AVIF are the same container with different codecs and brands; the
+ * major brand wins, with the compatibility list as a fallback for files whose
+ * major brand is the generic `mif1`.
+ */
+export function heifFormatOf(ftypBytes: Uint8Array): HeifFormat {
+  const major = ascii(ftypBytes, 8, 4);
+  const compatible = ascii(ftypBytes, 16, Math.max(0, ftypBytes.length - 16));
+  if (major === 'avif' || major === 'avis' || compatible.includes('avif') || compatible.includes('avis')) {
+    return AVIF_FORMAT;
+  }
+  return HEIC_FORMAT;
 }
 
 /**
@@ -233,6 +258,7 @@ export interface HeifStructure {
 export async function readHeifStructure(src: Source): Promise<HeifStructure | null> {
   const top = await scanTopLevel(src);
   if (!top) return null;
+  const format = heifFormatOf(await readAt(src, top.ftyp.pos, top.ftyp.size));
 
   const metaBytes = await readAt(src, top.meta.pos, top.meta.size);
   if (metaBytes.length !== top.meta.size) return null;
@@ -278,6 +304,7 @@ export async function readHeifStructure(src: Source): Promise<HeifStructure | nu
 
   return {
     top,
+    format,
     metaBytes,
     parts,
     iinfVersion: iinf.version,
@@ -289,15 +316,32 @@ export async function readHeifStructure(src: Source): Promise<HeifStructure | nu
   };
 }
 
+/** Brand-only sniff, for the error paths that run before the item table is read. */
+async function sniffContainerFormat(src: Source): Promise<HeifFormat> {
+  const head = await readAt(src, 0, 64);
+  if (head.length >= 16 && ascii(head, 4, 4) === 'ftyp') return heifFormatOf(head);
+  return HEIC_FORMAT;
+}
+
 export async function analyzeHeif(src: Source, _opts: StripOptions): Promise<ContainerAnalysis> {
   const warnings: Warning[] = [];
   const findings: Finding[] = [];
 
   const structure = await readHeifStructure(src);
-  if (!structure) return failed([{ id: 'warn.heif.noMeta', severity: 'error' }], src.size);
-  const { top, metaBytes, parts, associations, primary, items } = structure;
+  if (!structure) {
+    return failed([{ id: 'warn.heif.noMeta', severity: 'error' }], src.size, await sniffContainerFormat(src));
+  }
+  const { top, metaBytes, parts, associations, primary, items, format } = structure;
 
-  if (structure.items.length === 0) return failed([{ id: 'warn.heif.noItems', severity: 'error' }], src.size);
+  // An AVIF/HEIC sequence carries a `moov` box; dropping it would leave a
+  // broken animation, so such files are refused instead of half-cleaned.
+  if (top.others.some((box) => box.type === 'moov')) {
+    return failed([{ id: 'warn.heif.sequence', severity: 'error' }], src.size, format);
+  }
+
+  if (structure.items.length === 0) {
+    return failed([{ id: 'warn.heif.noItems', severity: 'error' }], src.size, format);
+  }
   const unlocated = structure.items.filter((item) => item.extentCount === 0).length;
   if (unlocated > 0) {
     warnings.push({
@@ -375,7 +419,9 @@ export async function analyzeHeif(src: Source, _opts: StripOptions): Promise<Con
       params: { types: [...new Set(unknownTypes)].join(', ') },
     });
   }
-  if (imageItems === 0) return failed([{ id: 'warn.heif.noImage', severity: 'error' }], src.size);
+  if (imageItems === 0) {
+    return failed([{ id: 'warn.heif.noImage', severity: 'error' }], src.size, format);
+  }
 
   // ---- orientation: `irot` survives the strip, so only a bare EXIF tag is lost
   const rotation = findRotation(metaBytes, parts.iprp, associations, primary);
@@ -426,15 +472,15 @@ export async function analyzeHeif(src: Source, _opts: StripOptions): Promise<Con
     ftypBytes,
     primary,
   });
-  if (!rebuilt) return failed([{ id: 'warn.heif.rebuildFailed', severity: 'error' }], src.size);
+  if (!rebuilt) return failed([{ id: 'warn.heif.rebuildFailed', severity: 'error' }], src.size, format);
 
   const droppedBytes = src.size - rebuilt.totalBytes;
   const ok = droppedBytes >= 0 && !warnings.some((warn) => warn.severity === 'error');
 
   return {
-    format: 'heic',
-    mime: 'image/heic',
-    ext: 'heic',
+    format: format.format,
+    mime: format.mime,
+    ext: format.ext,
     parts: ok ? rebuilt.containerParts : [],
     findings,
     warnings,
@@ -604,11 +650,15 @@ function buildContainer(input: RebuildInput): RebuildOutput | null {
   return { containerParts, totalBytes };
 }
 
-function failed(warnings: Warning[], fileSize: number): ContainerAnalysis {
+function failed(
+  warnings: Warning[],
+  fileSize: number,
+  format: HeifFormat = HEIC_FORMAT,
+): ContainerAnalysis {
   return {
-    format: 'heic',
-    mime: 'image/heic',
-    ext: 'heic',
+    format: format.format,
+    mime: format.mime,
+    ext: format.ext,
     parts: [],
     findings: [],
     warnings,

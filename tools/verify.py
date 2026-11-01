@@ -40,6 +40,7 @@ CASES = [
     "plain.png", "meta.png",
     "plain.webp", "meta.webp",
     "plain.gif", "meta.gif",
+    "plain.avif", "meta.avif",
 ]
 
 
@@ -162,7 +163,7 @@ def check(name: str, src_dir: Path = FIXTURES, out_dir: Path = OUTPUT) -> list[s
     out = out_dir / name
     if not out.exists():
         return [f"{name}: missing stripped output"]
-    if name.lower().endswith((".heic", ".heif")):
+    if name.lower().endswith((".heic", ".heif", ".avif")):
         return heif_check(name, src, out)
 
     try:
