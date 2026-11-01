@@ -54,18 +54,17 @@ function claimGeneratorOf(claim: CborMap): string | undefined {
   const legacy = asString(claim['claim_generator']);
   if (legacy) return legacy;
   const info = claim['claim_generator_info'];
-  if (Array.isArray(info)) {
-    const parts: string[] = [];
-    for (const item of info) {
-      const map = asMap(item);
-      if (!map) continue;
-      const name = asString(map['name']);
-      const version = asString(map['version']);
-      if (name) parts.push(version ? `${name} ${version}` : name);
-    }
-    if (parts.length > 0) return parts.join(', ');
+  // 1.x wrote a list, 2.x writes a single map.
+  const items = Array.isArray(info) ? info : info === undefined || info === null ? [] : [info];
+  const parts: string[] = [];
+  for (const item of items) {
+    const map = asMap(item);
+    if (!map) continue;
+    const name = asString(map['name']);
+    const version = asString(map['version']);
+    if (name) parts.push(version ? `${name} ${version}` : name);
   }
-  return undefined;
+  return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
 function actionsFromAssertion(box: JumbfBox): C2paAction[] {
@@ -163,6 +162,8 @@ function summarizeManifest(manifest: JumbfBox): C2paManifest {
   }
   for (const container of assertionBoxes) {
     for (const child of container.children ?? []) {
+      // `jumd` describes the container itself and would show up as a bogus label.
+      if (child.type === 'jumd') continue;
       if (child.label) assertionLabels.add(child.label);
     }
   }
@@ -195,13 +196,46 @@ function summarizeManifest(manifest: JumbfBox): C2paManifest {
   };
 }
 
+function hasClaimUnder(box: JumbfBox): boolean {
+  // Ignore `jumd` boxes: they describe the box they live in, so counting them
+  // would make a claim its own manifest.
+  const content = (box.children ?? []).filter((child) => child.type !== 'jumd');
+  return walkJumbf(content).some(
+    (b) => b.label === 'c2pa.claim' || b.label.startsWith('c2pa.claim.'),
+  );
+}
+
+/**
+ * A manifest is the deepest superbox that owns a claim.
+ *
+ * C2PA 1.x labelled it `c2pa.manifest`; 2.x labels it `urn:c2pa:<uuid>`, which
+ * is what every current generator writes (OpenAI's images included). Matching
+ * the label alone silently reported those files as "C2PA present, unparsed".
+ */
+function findManifests(boxes: readonly JumbfBox[]): JumbfBox[] {
+  const found: JumbfBox[] = [];
+  for (const box of boxes) {
+    // A `jumd` carries the same label as the box it describes; it is never a
+    // manifest itself.
+    if (box.type === 'jumd') continue;
+    const nested = findManifests(box.children ?? []);
+    if (nested.length > 0) {
+      found.push(...nested);
+      continue;
+    }
+    if (box.type === 'jumb' && (box.label === 'c2pa.manifest' || box.label.startsWith('c2pa.manifest.'))) {
+      found.push(box);
+      continue;
+    }
+    if (box.type === 'jumb' && box.label !== 'c2pa' && hasClaimUnder(box)) found.push(box);
+  }
+  return found;
+}
+
 /** Summarize every C2PA manifest reachable from a JUMBF tree. */
 export function summarizeC2pa(boxes: readonly JumbfBox[], bytes: number): C2paSummary {
   const all = walkJumbf(boxes);
-  const manifestBoxes = all.filter(
-    (b) => b.label === 'c2pa.manifest' || b.label.startsWith('c2pa.manifest.'),
-  );
-  const manifests = manifestBoxes.map(summarizeManifest);
+  const manifests = findManifests(boxes).map(summarizeManifest);
   const hasC2paBox = all.some((b) => b.label === 'c2pa' || b.label.startsWith('c2pa.'));
   return { present: hasC2paBox || manifests.length > 0, manifests, bytes, boxCount: all.length };
 }

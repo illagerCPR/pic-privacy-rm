@@ -52,6 +52,11 @@ export function describeGps(ifd: TiffIfd): GpsInfo | null {
   const lat = dmsToDecimal(tags.get(0x0002)?.value.nums ?? []);
   const lon = dmsToDecimal(tags.get(0x0004)?.value.nums ?? []);
   if (lat === undefined || lon === undefined) return null;
+  // A camera without a position fix still writes a GPS IFD, filled with zeros.
+  // Reporting that as 0.000000°, 0.000000° with a map link is worse than saying
+  // nothing: it invents a location in the Gulf of Guinea. Real samples (vivo,
+  // several Android skins) do exactly this.
+  if (lat === 0 && lon === 0) return null;
 
   const latRef = textOf(tags, 0x0001) || 'N';
   const lonRef = textOf(tags, 0x0003) || 'E';
