@@ -26,6 +26,7 @@ pnpm dev          # http://localhost:5188
 | `pnpm test:e2e` | Playwright against a real Chrome |
 | `pnpm fixtures` | Regenerate `tests/fixtures/` |
 | `pnpm verify` | Pillow-based verification of `tests/output/` |
+| `pnpm real` | Fetch the pinned public sample corpus into `tests/real/` |
 | `pnpm check` | typecheck + unit tests + build + offline assertion |
 
 ## Architecture
@@ -50,7 +51,7 @@ src/core/      pure container logic, no DOM, fully testable in Node
   pipeline.ts    scan / strip / verify orchestration
 src/workers/   the same pipeline, off the main thread
 src/hooks/     React state machine for the file list
-src/lib/       browser helpers: worker client, formatting, hex dump
+src/lib/       browser helpers: worker client, formatting, hex dump, JSON report
 src/components/ UI
 ```
 
@@ -87,8 +88,10 @@ Three independent layers, because a metadata remover that lies is worse than no 
    that the page made zero external requests; and load the production build with the network switched off
    to prove the service worker keeps the app usable offline.
 5. **Real-world samples** (`tests/real.test.ts`) run camera and phone exports through the same pipeline.
-   The folder is git-ignored because they are personal photos: drop files into `tests/real/` and
-   `pnpm test && pnpm verify` will clean them and decode the output with Pillow. CI skips this layer.
+   The folder is git-ignored because it holds personal photos: drop files into `tests/real/` and
+   `pnpm test && pnpm verify` will clean them and decode the output with Pillow. `pnpm real` fetches a
+   fixed set of public samples from ExifTool's corpus (commit plus per-file SHA-256 in
+   `tools/real-images.json`), so the same coverage is one command away. CI skips this layer.
 
 ## Adding a format
 
@@ -118,6 +121,10 @@ Three independent layers, because a metadata remover that lies is worse than no 
   current generator (OpenAI's images, for one). Find the deepest superbox that owns a `c2pa.claim`.
 - Cameras without a position fix still write a GPS IFD full of zeros. Treat `0°, 0°` as "no fix" or the
   report invents a location in the Gulf of Guinea; vivo's Android build does exactly this.
+- XMP is XML and may be UTF-16: decode the BOM (or the zero-byte pattern) before scanning. ExifTool keeps a
+  big-endian UTF-16 sample precisely because tools get this wrong; ours reported an empty packet.
+- Exported reports are a public format now. Add fields, never rename or repurpose them, and keep binaries
+  out: payloads are described by size.
 
 ## Commits
 

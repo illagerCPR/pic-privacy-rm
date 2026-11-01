@@ -59,6 +59,9 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
   hex viewer.
 - **Before and after, side by side.** Once a file is cleaned, the same table can be run on the output and
   shown next to the original, so what survived is evidence rather than a promise.
+- **Export a diagnostic report.** If a result ever looks wrong, download a JSON report of exactly what the
+  engine saw — hashes, findings, container blocks, settings and the verification result — and attach it to
+  a bug report. It describes the metadata, not the picture, but give it a read before sharing.
 - Batch clean, per-file states, progress, and a store-only ZIP for download.
 - Optional deep-clean of trailing data after the end marker.
 - English and Chinese UI, light and dark themes, keyboard accessible.
