@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PipelineClient } from '../lib/pipeline-client.ts';
+import type { MetadataReport } from '../core/metadata.ts';
 import type { RemovalEntry, ScanResult, StripOptions, VerifyResult } from '../core/types.ts';
 import { DEFAULT_STRIP_OPTIONS } from '../core/types.ts';
 import { bakeOrientation } from '../lib/bake.ts';
@@ -91,6 +92,8 @@ export interface Workspace {
   stripAll: () => Promise<void>;
   downloadItem: (id: string) => Promise<void>;
   downloadAll: () => Promise<void>;
+  /** Full metadata listing, parsed lazily and cached per item. */
+  inspectItem: (id: string) => Promise<MetadataReport | null>;
   options: StripOptions;
   setOptions: (patch: Partial<StripOptions>) => void;
   bake: boolean;
@@ -111,6 +114,11 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   // Strips run one at a time: deterministic, memory-flat, and fast enough
   // (the work is a single pass over the container).
   const stripLimit = useMemo(() => createLimiter(1), []);
+
+  // The full listing is far more expensive than a scan, so it is built only
+  // when the metadata tab is actually opened, then kept for the item's lifetime.
+  const inspectCache = useRef(new Map<string, MetadataReport>());
+  const inspectPending = useRef(new Map<string, Promise<MetadataReport>>());
 
   const updateItems = useCallback((updater: (prev: Item[]) => Item[]) => {
     const next = updater(itemsRef.current);
@@ -185,6 +193,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
 
   const removeItem = useCallback(
     (id: string) => {
+      inspectCache.current.delete(id);
       updateItems((prev) => {
         const target = prev.find((item) => item.id === id);
         if (target) URL.revokeObjectURL(target.previewUrl);
@@ -195,12 +204,39 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   );
 
   const clear = useCallback(() => {
+    inspectCache.current.clear();
+    inspectPending.current.clear();
     updateItems((prev) => {
       for (const item of prev) URL.revokeObjectURL(item.previewUrl);
       return [];
     });
     setProgress(null);
   }, [updateItems]);
+
+  const inspectItem = useCallback(
+    async (id: string): Promise<MetadataReport | null> => {
+      const cached = inspectCache.current.get(id);
+      if (cached) return cached;
+      const inFlight = inspectPending.current.get(id);
+      if (inFlight) return inFlight;
+
+      const item = itemsRef.current.find((entry) => entry.id === id);
+      if (!item || item.scan?.supported === false) return null;
+
+      const task = pipeline
+        .inspect(item.file, { keepIcc: settingsRef.current.options.keepIcc })
+        .then((report) => {
+          inspectCache.current.set(id, report);
+          return report;
+        })
+        .finally(() => {
+          inspectPending.current.delete(id);
+        });
+      inspectPending.current.set(id, task);
+      return task;
+    },
+    [pipeline],
+  );
 
   const stripOne = useCallback(
     async (item: Item) => {
@@ -342,6 +378,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     stripAll,
     downloadItem,
     downloadAll,
+    inspectItem,
     options: settings.options,
     setOptions,
     bake: settings.bake,

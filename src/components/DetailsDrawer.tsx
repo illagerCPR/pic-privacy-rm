@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { MetadataReport } from '../core/metadata.ts';
 import type { C2paManifest, Field, Finding } from '../core/types.ts';
 import type { Item } from '../hooks/useWorkspace.ts';
 import { useI18n } from '../i18n/index.tsx';
@@ -19,6 +20,7 @@ import {
   SparkIcon,
   XIcon,
 } from './Icons.tsx';
+import { MetadataTable } from './MetadataTable.tsx';
 
 type Group = NonNullable<Field['group']>;
 const GROUP_ORDER: Group[] = ['gps', 'device', 'author', 'time', 'software', 'capture', 'other'];
@@ -222,15 +224,52 @@ interface Props {
   onClose: () => void;
   onStrip: () => void;
   onDownload: () => void;
+  onLoadMetadata: (id: string) => Promise<MetadataReport | null>;
 }
 
-export function DetailsDrawer({ item, onClose, onStrip, onDownload }: Props) {
+type Tab = 'privacy' | 'structure' | 'meta';
+
+export function DetailsDrawer({ item, onClose, onStrip, onDownload, onLoadMetadata }: Props) {
   const { t } = useI18n();
-  const [tab, setTab] = useState<'privacy' | 'structure'>('privacy');
+  const [tab, setTab] = useState<Tab>('privacy');
+  const [meta, setMeta] = useState<{
+    loading: boolean;
+    report: MetadataReport | null;
+    error: string | null;
+  }>({ loading: false, report: null, error: null });
+  const metaLoadedFor = useRef<string | null>(null);
+  const itemId = item?.id;
 
   useEffect(() => {
     setTab('privacy');
-  }, [item?.id]);
+    setMeta({ loading: false, report: null, error: null });
+    metaLoadedFor.current = null;
+  }, [itemId]);
+
+  // The listing is built on demand: only opening this tab pays for it.
+  useEffect(() => {
+    if (tab !== 'meta' || !itemId) return undefined;
+    if (metaLoadedFor.current === itemId) return undefined;
+    metaLoadedFor.current = itemId;
+    let cancelled = false;
+    setMeta({ loading: true, report: null, error: null });
+    onLoadMetadata(itemId)
+      .then((report) => {
+        if (!cancelled) setMeta({ loading: false, report, error: null });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setMeta({
+            loading: false,
+            report: null,
+            error: error instanceof Error ? error.message : 'error',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, itemId, onLoadMetadata]);
 
   useEffect(() => {
     if (!item) return undefined;
@@ -289,6 +328,15 @@ export function DetailsDrawer({ item, onClose, onStrip, onDownload }: Props) {
             onClick={() => setTab('structure')}
           >
             {t('drawer.structure')}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'meta'}
+            className={tab === 'meta' ? 'is-active' : ''}
+            onClick={() => setTab('meta')}
+          >
+            {t('drawer.metadata')}
           </button>
         </div>
 
@@ -349,6 +397,15 @@ export function DetailsDrawer({ item, onClose, onStrip, onDownload }: Props) {
                 </div>
               )}
             </>
+          )}
+
+          {tab === 'meta' && (
+            <MetadataTable
+              report={meta.report}
+              loading={meta.loading}
+              error={meta.error}
+              supported={item.scan?.supported !== false}
+            />
           )}
 
           {tab === 'structure' && (

@@ -1,4 +1,6 @@
 /** Main-thread facade over the worker, with a graceful same-thread fallback. */
+import { inspectFile, type InspectOptions } from '../core/inspect.ts';
+import type { MetadataReport } from '../core/metadata.ts';
 import { scanFile, stripFile, verifyBlob, type StripOutcome } from '../core/pipeline.ts';
 import type { ScanResult, StripOptions, VerifyResult } from '../core/types.ts';
 
@@ -16,17 +18,19 @@ export interface PipelineClient {
   scan(file: File): Promise<ScanResult>;
   strip(file: File, options: StripOptions): Promise<StripOutcome>;
   verify(blob: Blob): Promise<VerifyResult>;
+  inspect(file: File, options: InspectOptions): Promise<MetadataReport>;
   dispose(): void;
 }
 
 interface WorkerReply {
   id: number;
   ok: boolean;
-  kind?: 'scan' | 'strip' | 'verify';
+  kind?: 'scan' | 'strip' | 'verify' | 'inspect';
   error?: string;
   scan?: unknown;
   outcome?: unknown;
   verify?: unknown;
+  report?: unknown;
 }
 
 export function createPipelineClient(): PipelineClient {
@@ -66,7 +70,14 @@ export function createPipelineClient(): PipelineClient {
         entry.reject(new Error(data.error ?? 'worker-error'));
         return;
       }
-      const payload = data.kind === 'scan' ? data.scan : data.kind === 'strip' ? data.outcome : data.verify;
+      const payload =
+        data.kind === 'scan'
+          ? data.scan
+          : data.kind === 'strip'
+            ? data.outcome
+            : data.kind === 'inspect'
+              ? data.report
+              : data.verify;
       if (payload === undefined) {
         entry.reject(new Error('worker-empty-response'));
         return;
@@ -108,6 +119,11 @@ export function createPipelineClient(): PipelineClient {
     },
     verify(blob) {
       return request<VerifyResult>({ kind: 'verify', blob }, () => verifyBlob(blob));
+    },
+    inspect(file, options) {
+      return request<MetadataReport>({ kind: 'inspect', file, keepIcc: options.keepIcc }, () =>
+        inspectFile(file, options),
+      );
     },
     dispose() {
       disable('disposed');

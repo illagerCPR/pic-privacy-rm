@@ -185,3 +185,32 @@ test('keeps working offline after the first visit', async ({ page, context }) =>
     await context.setOffline(false);
   }
 });
+
+test('lists every metadata entry and filters the table', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  const drawer = page.locator('.drawer');
+  await drawer.getByRole('tab', { name: '全部元数据' }).click();
+
+  // The listing is produced by the worker on demand, so it arrives async.
+  await expect(drawer.locator('.meta-row').first()).toBeVisible({ timeout: 15_000 });
+  expect(await drawer.locator('.meta-row').count()).toBeGreaterThan(70);
+
+  // Spot-check values that come from different containers.
+  await expect(drawer).toContainText('TestCam');
+  await expect(drawer).toContainText(`35° 41' 21.6"`);
+  await expect(drawer).toContainText('0102030405060708');
+  await expect(drawer).toContainText('PicPrivacy Test Signer');
+
+  // Searching narrows the listing to matching rows only.
+  await drawer.getByRole('searchbox').fill('SN-123456789');
+  await expect(drawer.locator('.meta-row')).toHaveCount(1);
+  await expect(drawer.locator('.meta-tally')).toContainText('匹配 1');
+
+  await drawer.getByRole('searchbox').fill('no-such-tag');
+  await expect(drawer.locator('.meta-row')).toHaveCount(0);
+  await expect(drawer).toContainText('没有匹配项');
+});

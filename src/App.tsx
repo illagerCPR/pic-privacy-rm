@@ -215,6 +215,7 @@ export default function App() {
         onDownload={() => {
           if (detailItem) void workspace.downloadItem(detailItem.id);
         }}
+        onLoadMetadata={workspace.inspectItem}
       />
 
       <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
