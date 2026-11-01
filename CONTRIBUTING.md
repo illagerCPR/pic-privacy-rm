@@ -54,7 +54,8 @@ src/core/      pure container logic, no DOM, fully testable in Node
   pipeline.ts    scan / strip / verify orchestration
 src/workers/   the same pipeline, off the main thread
 src/hooks/     React state machine for the file list
-src/lib/       browser helpers: worker client, formatting, hex dump, JSON report
+src/lib/       browser helpers: worker client, formatting, hex dump, JSON report,
+               store-only ZIP writer (zip.ts)
 src/components/ UI
 ```
 
@@ -72,6 +73,10 @@ src/components/ UI
    external URL appears in the bundle (string constants for namespaces and clickable links are allow-listed).
 6. **Strips run one at a time.** The limiter is not re-entrant: nesting it deadlocks when two outer jobs
    hold every slot. Batch code calls `stripOne`, which handles concurrency itself.
+7. **Archives are assembled, not re-compressed.** `src/lib/zip.ts` writes a store-only ZIP whose members
+   are the stripped `Blob`s themselves, so packaging two gigabytes costs a few kilobytes of headers. The
+   only pass over the bytes is the CRC-32; deflating would add a full copy of the batch and save nothing on
+   already-compressed images.
 
 ## Testing
 
@@ -91,7 +96,8 @@ Three independent layers, because a metadata remover that lies is worse than no 
    layout is compared rather than pixels. TIFF gets its own check: Pillow's `getexif()` returns IFD0
    there, so the tags are audited against an allow-list and every page's pixels are compared.
 4. **End-to-end tests** (`e2e/`) drive the real UI in Chrome: upload, inspect the drawer, clean, download
-   the ZIP and inspect its bytes; check orientation baking and the pre-clean orientation warning; open the
+   the ZIP and unpack it with CPython's `zipfile` (`e2e/zip.ts`) — an implementation that shares no code
+   with ours and checks every member's CRC-32; check orientation baking and the pre-clean orientation warning; open the
    all-metadata tab, expand a MakerNote hex dump and compare the listing against the cleaned output; assert
    that the page made zero external requests; and load the production build with the network switched off
    to prove the service worker keeps the app usable offline.
@@ -137,6 +143,10 @@ change: `git checkout --` the rest.
   big-endian UTF-16 sample precisely because tools get this wrong; ours reported an empty packet.
 - Exported reports are a public format now. Add fields, never rename or repurpose them, and keep binaries
   out: payloads are described by size.
+- A ZIP built from Blob references still has to describe each member: `method = 0`, the real CRC-32 in the
+  local header, and bit 11 of the flags set or non-ASCII names turn into mojibake. Sizes and offsets are
+  32-bit, so an archive past 4 GiB needs Zip64 — we refuse it with a clear message instead of writing one
+  that no tool can unpack.
 
 HEIF-specific traps, all of which produced a broken file at least once:
 

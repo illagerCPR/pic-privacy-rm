@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { unzipSync } from 'fflate';
+import { extractZip } from './zip.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const fixtures = join(here, '..', 'tests', 'fixtures');
@@ -90,15 +90,17 @@ test('scans, strips and packages images entirely in the browser', async ({ page 
   const download = await downloadPromise;
   const zipPath = join(outDir, 'batch.zip');
   await download.saveAs(zipPath);
-  const archive = unzipSync(new Uint8Array(readFileSync(zipPath)));
-  const names = Object.keys(archive).sort();
+  // Python's zipfile is an independent reader: it validates every CRC-32.
+  const members = extractZip(zipPath, join(outDir, 'batch'));
+  const names = members.map((member) => member.name).sort();
   writeFileSync(join(outDir, 'names.txt'), names.join('\n'));
   expect(names).toHaveLength(5);
   expect(names).toContain('meta-clean.jpg');
   expect(names).toContain('plain-clean.jpg');
-  for (const [name, bytes] of Object.entries(archive)) {
-    assertClean(name, bytes);
-    writeFileSync(join(outDir, name), bytes);
+  for (const member of members) {
+    expect(member.method, `${member.name} is stored, not re-compressed`).toBe(0);
+    expect(member.utf8, `${member.name} keeps a UTF-8 name`).toBe(true);
+    assertClean(member.name, new Uint8Array(readFileSync(join(outDir, 'batch', member.name))));
   }
 
   expect(externalRequests, `unexpected external requests: ${externalRequests.join(', ')}`).toEqual([]);
@@ -139,16 +141,16 @@ test('cleans a multi-page TIFF and keeps every page', async ({ page }) => {
   const download = await downloadPromise;
   const zipPath = join(outDir, 'tiff.zip');
   await download.saveAs(zipPath);
-  const archive = unzipSync(new Uint8Array(readFileSync(zipPath)));
-  expect(Object.keys(archive).sort()).toEqual(['meta-clean.tif', 'multipage-clean.tif']);
+  const members = extractZip(zipPath, join(outDir, 'tiff'));
+  expect(members.map((member) => member.name).sort()).toEqual(['meta-clean.tif', 'multipage-clean.tif']);
 
-  for (const [name, bytes] of Object.entries(archive)) {
-    assertClean(name, bytes);
+  for (const member of members) {
+    const bytes = new Uint8Array(readFileSync(join(outDir, 'tiff', member.name)));
+    assertClean(member.name, bytes);
     const text = Buffer.from(bytes).toString('latin1');
     for (const marker of ['Alice Example', 'Terrace at dusk', 'x:xmpmeta', 'Barcelona']) {
-      expect(text.includes(marker), `${name} still contains ${JSON.stringify(marker)}`).toBe(false);
+      expect(text.includes(marker), `${member.name} still contains ${JSON.stringify(marker)}`).toBe(false);
     }
-    writeFileSync(join(outDir, name), bytes);
   }
 });
 
@@ -426,4 +428,46 @@ test('exports a reproducible diagnostic report', async ({ page }) => {
   expect(report.scan.blocks.length).toBeGreaterThan(0);
   // Nothing was cleaned yet, so there is no verification block to report.
   expect(report.result).toBeUndefined();
+});
+
+test('packages a long batch and every member matches the single-file download', async ({ page }) => {
+  const consoleErrors: string[] = [];
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+
+  await page.goto('/');
+  // 40 copies: enough that the zip has to be assembled from many members
+  // without ever holding a second copy of their bytes.
+  await page.setInputFiles(
+    'input[type=file] >> nth=0',
+    Array.from({ length: 40 }, () => join(fixtures, 'meta.jpg')),
+  );
+  await expect(page.locator('.file-row')).toHaveCount(40);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done')).toHaveCount(40, { timeout: 120_000 });
+
+  // One file on its own, so the archive can be compared byte for byte.
+  const singlePromise = page.waitForEvent('download');
+  await page.locator('.file-row--done button[aria-label^="下载清理后的文件"]').first().click();
+  const singlePath = join(outDir, 'single.jpg');
+  await (await singlePromise).saveAs(singlePath);
+  const singleSha = createHash('sha256').update(readFileSync(singlePath)).digest('hex');
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '下载全部 (.zip)' }).click();
+  const download = await downloadPromise;
+  const zipPath = join(outDir, 'large.zip');
+  await download.saveAs(zipPath);
+
+  const members = extractZip(zipPath, join(outDir, 'large'));
+  expect(members).toHaveLength(40);
+  expect(new Set(members.map((member) => member.name)).size, 'member names stay unique').toBe(40);
+  for (const member of members) {
+    expect(member.sha256, `${member.name} differs from the single download`).toBe(singleSha);
+    assertClean(member.name, new Uint8Array(readFileSync(join(outDir, 'large', member.name))));
+  }
+  expect(consoleErrors).toEqual([]);
 });

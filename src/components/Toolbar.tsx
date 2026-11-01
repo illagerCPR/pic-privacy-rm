@@ -26,6 +26,8 @@ interface Props {
   cancelling: boolean;
   busy: boolean;
   progress: { done: number; total: number } | null;
+  /** Set while the archive is being assembled, so a big batch shows movement. */
+  packing: { done: number; total: number } | null;
   canStripAll: boolean;
   canDownloadAll: boolean;
 }
@@ -57,8 +59,9 @@ function Toggle(props: {
 
 export function Toolbar(props: Props) {
   const { t } = useI18n();
-  const { stats, progress } = props;
+  const { stats, progress, packing } = props;
   const percent = progress && progress.total > 0 ? (progress.done / progress.total) * 100 : 0;
+  const packingPercent = packing && packing.total > 0 ? (packing.done / packing.total) * 100 : 0;
 
   return (
     <div className="toolbar-wrap">
@@ -95,7 +98,7 @@ export function Toolbar(props: Props) {
             type="button"
             className="btn btn--ghost"
             onClick={props.onDownloadAll}
-            disabled={!props.canDownloadAll}
+            disabled={!props.canDownloadAll || packing !== null}
           >
             <DownloadIcon size={17} />
             {t('actions.downloadAll')}
@@ -123,6 +126,17 @@ export function Toolbar(props: Props) {
           >
             {props.cancelling ? t('status.cancelling') : t('actions.cancelBatch')}
           </button>
+        </div>
+      )}
+
+      {packing && (
+        <div className="progress" role="status" aria-live="polite" aria-label={t('a11y.packing')}>
+          <div className="progress-track">
+            <div className="progress-bar" style={{ width: `${packingPercent}%` }} />
+          </div>
+          <span className="progress-text">
+            {t('status.packing')} {packing.done} / {packing.total}
+          </span>
         </div>
       )}
 

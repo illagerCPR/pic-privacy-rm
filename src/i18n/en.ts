@@ -10,7 +10,7 @@ export const en: Dict = {
     'EXIF shooting data, GPS coordinates, XMP and C2PA content credentials — removed losslessly, inside this browser tab. Your files never leave this device.',
   'hero.chip.local': 'Fully local',
   'hero.chip.lossless': 'Zero re-encoding',
-  'hero.chip.formats': 'JPEG · PNG · WebP · GIF',
+  'hero.chip.formats': 'JPEG · PNG · WebP · GIF · HEIC · AVIF · TIFF',
 
   'drop.title': 'Drop images here',
   'drop.subtitle': 'or click to choose files — you can also paste from the clipboard',
@@ -18,7 +18,7 @@ export const en: Dict = {
   'drop.pickFolder': 'Choose folder',
   'drop.paste': 'Paste',
   'drop.addMore': 'Add more images',
-  'drop.formats': 'HEIC, TIFF and AVIF are not supported yet — convert them first',
+  'drop.formats': 'HEIC, AVIF and TIFF are supported; multi-page TIFF keeps every page. Convert image sequences (avis) first',
   'drop.dragging': 'Release to add',
 
   'stats.files': '{n} files',
@@ -40,6 +40,7 @@ export const en: Dict = {
   'actions.cancel': 'Cancel',
   'actions.cancelBatch': 'Stop cleaning',
   'status.cancelling': 'Stopping…',
+  'status.packing': 'Packing',
   'actions.retry': 'Retry',
   'actions.close': 'Close',
   'actions.remove': 'Remove',
@@ -198,11 +199,11 @@ export const en: Dict = {
   'error.noFiles': 'Add some images first',
   'error.worker': 'Background worker unavailable, using the main thread',
   'error.zipFailed': 'Could not build the archive',
+  'error.zipTooLarge': 'The archive would exceed 4 GB — download it in smaller batches',
 
   'toast.added': 'Added {n} files',
   'toast.skipped': 'Skipped {n} unsupported files',
   'toast.done': 'Done: {n} files cleaned and verified',
-  'toast.zip': 'Building archive…',
   'toast.cancelRequested': 'Queue stopped; the file in flight will finish',
   'toast.batchCancelled': 'Batch cancelled: {n} cleaned, {left} left untouched',
   'toast.zipDone': 'Archive download started',
@@ -320,4 +321,5 @@ export const en: Dict = {
   'a11y.download': 'Download the cleaned file',
   'a11y.remove': 'Remove from list',
   'a11y.progress': 'Processing progress',
+  'a11y.packing': 'Archive progress',
 };

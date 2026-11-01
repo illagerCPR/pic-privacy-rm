@@ -184,6 +184,7 @@ export default function App() {
               cancelling={workspace.cancelling}
               busy={workspace.busy}
               progress={workspace.progress}
+              packing={workspace.packing}
               canStripAll={canStripAll}
               canDownloadAll={canDownloadAll}
             />

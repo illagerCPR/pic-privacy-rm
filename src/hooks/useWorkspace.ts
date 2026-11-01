@@ -5,7 +5,8 @@ import type { RemovalEntry, ScanResult, StripOptions, VerifyResult } from '../co
 import { DEFAULT_STRIP_OPTIONS } from '../core/types.ts';
 import { bakeOrientation } from '../lib/bake.ts';
 import { createToken, runBatch, type BatchToken } from '../lib/batch.ts';
-import { archiveName, buildZip, downloadBlob } from '../lib/download.ts';
+import { archiveName, downloadBlob } from '../lib/download.ts';
+import { buildZip, ZipError, type ZipEntry } from '../lib/zip.ts';
 import { buildReport, reportFileName } from '../lib/report.ts';
 import { looksLikeImage, outputName, sortFilesByName, uniqueName } from '../lib/files.ts';
 import { createLimiter } from '../lib/queue.ts';
@@ -106,6 +107,8 @@ export interface Workspace {
   setBake: (value: boolean) => void;
   busy: boolean;
   progress: { done: number; total: number } | null;
+  /** Members packed so far while the archive is assembled, null when idle. */
+  packing: { done: number; total: number } | null;
   /** True once a batch has been asked to stop but a file is still finishing. */
   cancelling: boolean;
   cancelBatch: () => void;
@@ -117,7 +120,9 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [packing, setPacking] = useState<{ done: number; total: number } | null>(null);
   const batchRef = useRef<BatchToken | null>(null);
+  const packingRef = useRef(false);
   const itemsRef = useRef<Item[]>([]);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -433,7 +438,8 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   );
 
   const downloadAll = useCallback(async () => {
-    const ready: { name: string; blob: Blob }[] = [];
+    if (packingRef.current) return;
+    const ready: ZipEntry[] = [];
     const taken = new Set<string>();
     for (const item of itemsRef.current) {
       const result = item.result ?? (item.state === 'clean' ? passthroughResult(item) : undefined);
@@ -444,13 +450,18 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
       notify('error.noFiles');
       return;
     }
-    notify('toast.zip');
+    packingRef.current = true;
+    setPacking({ done: 0, total: ready.length });
     try {
-      const archive = await buildZip(ready);
+      const archive = await buildZip(ready, (tick) => setPacking({ done: tick.done, total: tick.total }));
       downloadBlob(archive, archiveName());
       notify('toast.zipDone');
-    } catch {
-      notify('error.zipFailed');
+    } catch (error) {
+      const tooLarge = error instanceof ZipError && error.code === 'archive-too-large';
+      notify(tooLarge ? 'error.zipTooLarge' : 'error.zipFailed');
+    } finally {
+      packingRef.current = false;
+      setPacking(null);
     }
   }, [notify, passthroughResult]);
 
@@ -485,6 +496,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     setBake,
     busy,
     progress,
+    packing,
     cancelling,
     cancelBatch,
   };

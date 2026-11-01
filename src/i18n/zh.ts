@@ -9,7 +9,7 @@ export const zh = {
     'EXIF 拍摄信息、GPS 位置、XMP 与 C2PA 内容凭证，全部在你的浏览器内无损剔除。文件不会离开这台设备。',
   'hero.chip.local': '完全本地',
   'hero.chip.lossless': '画质零损失',
-  'hero.chip.formats': 'JPEG · PNG · WebP · GIF',
+  'hero.chip.formats': 'JPEG · PNG · WebP · GIF · HEIC · AVIF · TIFF',
 
   'drop.title': '把图片拖到这里',
   'drop.subtitle': '或点击选择文件，也可以直接从剪贴板粘贴',
@@ -17,7 +17,7 @@ export const zh = {
   'drop.pickFolder': '选择文件夹',
   'drop.paste': '粘贴',
   'drop.addMore': '添加更多图片',
-  'drop.formats': 'HEIC、TIFF、AVIF 暂不支持，可用系统工具先转换',
+  'drop.formats': '支持 HEIC、AVIF、TIFF；多页 TIFF 会逐页保留，序列帧（avis）请先转换',
   'drop.dragging': '松开即可添加',
 
   'stats.files': '{n} 个文件',
@@ -39,6 +39,7 @@ export const zh = {
   'actions.cancel': '取消',
   'actions.cancelBatch': '取消批量清理',
   'status.cancelling': '取消中…',
+  'status.packing': '打包中',
   'actions.retry': '重试',
   'actions.close': '关闭',
   'actions.remove': '移除',
@@ -193,11 +194,11 @@ export const zh = {
   'error.noFiles': '请先添加图片',
   'error.worker': '后台线程不可用，已切换到主线程',
   'error.zipFailed': '打包失败',
+  'error.zipTooLarge': '压缩包会超过 4 GB 上限，请分批下载',
 
   'toast.added': '已添加 {n} 个文件',
   'toast.skipped': '跳过 {n} 个不支持的文件',
   'toast.done': '完成：{n} 个文件已清理并通过复检',
-  'toast.zip': '正在打包…',
   'toast.cancelRequested': '已停止排队，正在处理的这一张会做完',
   'toast.batchCancelled': '批量清理已取消：完成 {n} 个，剩余 {left} 个未处理',
   'toast.zipDone': '压缩包已开始下载',
@@ -313,6 +314,7 @@ export const zh = {
   'a11y.download': '下载清理后的文件',
   'a11y.remove': '从列表移除',
   'a11y.progress': '处理进度',
+  'a11y.packing': '打包进度',
 } as const;
 
 export type MessageKey = keyof typeof zh;
