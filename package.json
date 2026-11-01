@@ -15,6 +15,7 @@
     "test:watch": "vitest",
     "fixtures": "python3 tools/make_fixtures.py",
     "verify": "python3 tools/verify.py",
+    "real": "python3 tools/fetch_real.py",
     "check": "pnpm typecheck && pnpm test && pnpm build && node tools/check_offline.mjs",
     "test:e2e": "playwright test",
     "check:e2e": "pnpm exec playwright test"
