@@ -23,6 +23,7 @@ PicPrivacy shows you what is inside a file and then removes it — losslessly, b
 | **PNG** | `tEXt` / `zTXt` / `iTXt` text, `eXIf`, `tIME`, `caBX` (C2PA), Apple `iDOT`, unknown ancillary chunks | pixels, colour chunks (`iCCP`, `gAMA`, `sRGB`, …), APNG frames |
 | **WebP** | `EXIF`, `XMP `, `C2PA`, `JUMBF` chunks (and the corresponding flag bits in `VP8X`) | pixels, alpha, animation, ICC |
 | **GIF** | comment extensions, XMP application extension, trailing bytes | every frame, colour tables, looping |
+| **HEIC** | the `Exif` item (including GPS), the XMP `mime` item, `jumb` (C2PA), unknown items | picture items (tiles, `grid`, thumbnail, HDR gain map), codec and colour properties |
 
 Each file is re-scanned after cleaning and the download is blocked unless the result is provably clean.
 
@@ -36,7 +37,8 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
 - **Orientation** is the one tag with no perfect answer: dropping it can leave photos sideways in some
   viewers. The app warns you before cleaning a file that carries one; *Bake orientation into pixels*
   rotates the image with Canvas instead — that re-encodes the picture, so it costs a little quality and
-  is strictly opt-in.
+  is strictly opt-in. HEIC is the exception: its orientation lives in the container's `irot` property,
+  which travels with the picture items, so nothing goes sideways and nothing needs baking.
 
 ## Privacy by construction
 
@@ -70,8 +72,10 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
 
 ## Limits worth knowing
 
-- **HEIC, TIFF, AVIF, SVG and PDF are not supported yet.** They are reported as unsupported instead of
+- **TIFF, AVIF, SVG and PDF are not supported yet.** They are reported as unsupported instead of
   being silently "cleaned".
+- **Browsers cannot preview HEIC.** Chrome and friends cannot decode it at all, so the thumbnail falls
+  back to a file icon. Cleaning, verification and download all work normally, pixel for pixel.
 - **Metadata is not content.** Faces, house numbers, reflections, watermarks and landmarks in the picture
   stay in the picture. If you need to anonymise the image itself, use a different tool.
 - **Removing C2PA is deliberate.** Content credentials prove provenance; stripping them means the image

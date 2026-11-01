@@ -38,6 +38,8 @@ src/core/      pure container logic, no DOM, fully testable in Node
   png.ts         chunk walk + CRC checks
   webp.ts        RIFF chunks + VP8X flag fixups
   gif.ts         block walk
+  isobmff.ts     ISO BMFF boxes: iloc / iinf / iref / ipma read and rewrite
+  heif.ts        HEIC item table, allow-list rebuild, lossless payload repack
   tiff.ts        TIFF/EXIF IFD reader
   gps.ts         DMS → decimal, display fields
   xmp.ts         tolerant XMP scanner
@@ -81,7 +83,9 @@ Three independent layers, because a metadata remover that lies is worse than no 
    output, and write it to `tests/output/` for the next layer.
 3. **Independent verification** (`tools/verify.py`) decodes the outputs with Pillow — not with our own
    code — and checks that no EXIF/GPS/XMP/IPTC/C2PA survives, that the pixels are byte-identical to the
-   input, and that the files still decode.
+   input, and that the files still decode. HEIF goes through ffmpeg instead, because Pillow cannot open it;
+   the sample ExifTool ships has a stub codec payload, so for that one the container's declared stream
+   layout is compared rather than pixels.
 4. **End-to-end tests** (`e2e/`) drive the real UI in Chrome: upload, inspect the drawer, clean, download
    the ZIP and inspect its bytes; check orientation baking and the pre-clean orientation warning; open the
    all-metadata tab, expand a MakerNote hex dump and compare the listing against the cleaned output; assert
@@ -125,6 +129,25 @@ Three independent layers, because a metadata remover that lies is worse than no 
   big-endian UTF-16 sample precisely because tools get this wrong; ours reported an empty packet.
 - Exported reports are a public format now. Add fields, never rename or repurpose them, and keep binaries
   out: payloads are described by size.
+
+HEIF-specific traps, all of which produced a broken file at least once:
+
+- A HEIF `Exif` item is `[4-byte offset][Exif\0\0][TIFF]`, and the offset counts from the end of that
+  four-byte field. Slicing at `offset` yields `"if\0\0MM"` and `parseTiff` returns null — which looks like
+  "the parser does not support HEIC" rather than an off-by-four.
+- `ipma`'s `item_ID` is 16-bit in version 0 and 32-bit in version 1. Reading it as 32-bit shifts the whole
+  association table and invents item ids like 66435.
+- `iloc` keeps version 0 unable to express `construction_method`. An item stored in `idat` (`method=1`)
+  needs the file's original version preserved, or its data address disappears.
+- Deleting metadata items means rewriting `iinf`, `iloc` **and** `iref` together. A dangling `cdsc`
+  reference to a removed item is a container some parsers reject.
+- `iprp` must contain the whole `ipco` box, not just its body: dropping the header produces a container
+  that ffmpeg refuses to open and nothing else complains about.
+- Real iPhone files put the Exif item *between* picture tiles in `mdat`, so the payload of every later item
+  moves. Rebuild by writing the surviving payloads in source order and assigning offsets as you go instead
+  of trying to patch addresses in place.
+- ffmpeg decodes a HEIF tile grid only with `-map 0:g:0`; `-map 0:v:0` hands you a single 512×512 tile and
+  an unchanged checksum that proves nothing.
 
 ## Commits
 
