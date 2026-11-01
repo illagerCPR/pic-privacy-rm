@@ -11,3 +11,6 @@ __pycache__/
 e2e/downloads/
 playwright-report/
 tests/output/
+
+# Real-world samples are personal photos: never commit them.
+tests/real/

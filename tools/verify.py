@@ -19,6 +19,8 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 FIXTURES = ROOT / "tests" / "fixtures"
 OUTPUT = ROOT / "tests" / "output"
+REAL = ROOT / "tests" / "real"
+REAL_OUTPUT = OUTPUT / "real"
 
 # Metadata markers that must not survive a strip pass.
 FORBIDDEN = {
@@ -40,15 +42,55 @@ CASES = [
 ]
 
 
+# A stripped JPEG may only keep the segments a decoder needs.
+JPEG_APP_PREFIXES = {0xE0: b"JFIF", 0xE2: b"ICC_PROFILE", 0xEE: b"Adobe"}
+
+
+def jpeg_header_problems(name: str, data: bytes) -> list[str]:
+    problems: list[str] = []
+    pos = 2
+    while pos + 4 <= len(data):
+        if data[pos] != 0xFF:
+            break
+        marker = data[pos + 1]
+        if marker in (0xDA, 0xD9):
+            break
+        if marker == 0x00 or 0xD0 <= marker <= 0xD7:
+            pos += 2
+            continue
+        length = int.from_bytes(data[pos + 2 : pos + 4], "big")
+        if length < 2:
+            break
+        if marker == 0xFE:
+            problems.append(f"{name}: JPEG comment segment survived")
+        elif 0xE0 <= marker <= 0xEF:
+            prefix = JPEG_APP_PREFIXES.get(marker)
+            payload = data[pos + 4 : pos + 4 + len(prefix or b"")]
+            if prefix is None:
+                problems.append(f"{name}: APP{marker - 0xE0} segment survived")
+            elif payload != prefix:
+                problems.append(f"{name}: APP{marker - 0xE0} is not the expected {prefix.decode()!r}")
+        pos += 2 + length
+    return problems
+
+
+def src_has_icc(path: Path) -> bool:
+    try:
+        with Image.open(path) as im:
+            return "icc_profile" in im.info
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def pixels(path: Path) -> bytes:
     with Image.open(path) as im:
         return im.convert("RGB").tobytes(), im.size
 
 
-def check(name: str) -> list[str]:
+def check(name: str, src_dir: Path = FIXTURES, out_dir: Path = OUTPUT) -> list[str]:
     problems: list[str] = []
-    src = FIXTURES / name
-    out = OUTPUT / name
+    src = src_dir / name
+    out = out_dir / name
     if not out.exists():
         return [f"{name}: missing stripped output"]
 
@@ -92,9 +134,14 @@ def check(name: str) -> list[str]:
             pos += 2 + length
 
     # ICC is kept by default; make sure the strip did not damage it.
-    if name in {"meta.jpg", "meta.png", "meta.webp"}:
-        if "icc_profile" not in info_keys:
-            problems.append(f"{name}: ICC profile was dropped unexpectedly")
+    keep_icc = name in {"meta.jpg", "meta.png", "meta.webp"} or (
+        src_dir == REAL and src_has_icc(src)
+    )
+    if keep_icc and "icc_profile" not in info_keys:
+        problems.append(f"{name}: ICC profile was dropped unexpectedly")
+
+    if fmt == "JPEG":
+        problems.extend(jpeg_header_problems(name, data))
 
     # Pixels must be identical: the strip is byte surgery, not re-encoding.
     try:
@@ -135,6 +182,22 @@ def main() -> int:
                 print(f"     - {p}")
         else:
             print(f"ok   {name}")
+
+    if REAL_OUTPUT.exists():
+        print()
+        print("real-world samples:")
+        for path in sorted(REAL_OUTPUT.iterdir()):
+            if not path.is_file():
+                continue
+            problems = check(path.name, src_dir=REAL, out_dir=REAL_OUTPUT)
+            checked += 1
+            if problems:
+                failures.extend(problems)
+                print(f"FAIL {path.name}")
+                for item in problems:
+                    print(f"     - {item}")
+            else:
+                print(f"ok   {path.name}")
 
     print()
     if failures:
