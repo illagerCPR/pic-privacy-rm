@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.vite/
+coverage/
+*.local
+.DS_Store
+.dsh-meow/
+.playwright/
+test-results/
+__pycache__/
+e2e/downloads/
+playwright-report/
+tests/output/

@@ -1,0 +1,18 @@
+# PicPrivacy — 项目约定
+
+纯前端、零网络的图片元数据清除工具。README 面向用户；开发细节只放在 CONTRIBUTING.md。
+
+## 不可破坏的约束
+
+1. **白名单策略**：容器里只保留解码必需的块与色彩块，其余（含未知 APPn / chunk / uuid）一律删除。
+   新增格式必须遵守，不能改成"只删已知元数据"。
+2. **删除不依赖解析成功**：解析只用于报告；即使 EXIF/XMP/C2PA 结构损坏，也必须被整段剔除。
+3. **不产出未复检的文件**：strip 之后必须重新扫描，残留非空则禁止下载。
+4. **默认零重编码**：输出由源 Blob 的切片拼装；只有方向烘焙（用户显式开启）才经过 canvas。
+5. **零网络**：构建注入 `connect-src 'none'`；`node tools/check_offline.mjs` 必须在 CI 通过。
+6. **并发限制器不可嵌套**：外层占满槽位会让内层永久等待（已踩过）；批处理只调用 `stripOne`。
+
+## 质量门槛
+
+提交前跑 `pnpm check`（typecheck + 单测 + 构建 + 离线断言），改动涉及 UI 时再跑 `pnpm test:e2e`。
+测试三层：合成 fixture → 单测 → 用 Pillow 独立校验（`pnpm verify`）+ 真实 Chrome e2e。
