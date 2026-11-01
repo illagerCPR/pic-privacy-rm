@@ -228,7 +228,7 @@ export async function analyzeGif(src: Source, opts: StripOptions): Promise<Conta
 }
 
 /** GIF XMP sub-blocks end with a 0x01 0x00… magic trailer; strip it. */
-function stripXmpMagic(data: Uint8Array | undefined): Uint8Array {
+export function stripXmpMagic(data: Uint8Array | undefined): Uint8Array {
   if (!data) return new Uint8Array(0);
   const magic = data.indexOf(0x01);
   const end = magic > 0 ? magic : data.length;

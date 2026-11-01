@@ -14,6 +14,7 @@ import { tagName } from './tag-names.ts';
 import { parseTiff, type TiffKind, type TiffResult, type TiffTag, type TiffValue } from './tiff.ts';
 
 export type MetadataGroupId =
+  | 'file'
   | 'ifd0'
   | 'exif'
   | 'gps'
@@ -21,9 +22,9 @@ export type MetadataGroupId =
   | 'ifd1'
   | 'xmp'
   | 'iptc'
+  | 'text'
   | 'c2pa'
-  | 'container'
-  | 'file';
+  | 'container';
 
 export interface MetadataItem {
   /** Display name: a tag name, or `Tag0x1234` for ids we do not know. */
@@ -42,6 +43,8 @@ export interface MetadataItem {
   bytes?: Uint8Array;
   /** Byte length of the raw payload. */
   size?: number;
+  /** Overrides the group's removal flag when the group is mixed. */
+  removed?: boolean;
 }
 
 export interface MetadataGroup {
