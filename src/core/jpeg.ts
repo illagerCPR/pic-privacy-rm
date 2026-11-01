@@ -7,11 +7,9 @@
  * segments are dropped too, so metadata we do not recognise cannot survive.
  */
 import { decodeText, startsWithBytes, u16be } from './bytes.ts';
-import { summarizeC2pa } from './c2pa.ts';
 import { summarizeExifBlock } from './exif.ts';
-import { buildC2paFindings, buildExifFindings, buildIptcFindings, buildXmpFindings } from './findings.ts';
+import { buildExifFindings, buildIptcFindings, buildJumbfFindings, buildXmpFindings } from './findings.ts';
 import { parsePhotoshopApp13 } from './iptc.ts';
-import { parseJumbf, type JumbfBox } from './jumbf.ts';
 import { readAt, type Source } from './source.ts';
 import type { BlockInfo, ContainerAnalysis, Finding, Part, StripOptions, Warning } from './types.ts';
 import { parseXmp } from './xmp.ts';
@@ -268,37 +266,6 @@ export async function analyzeJpeg(src: Source, opts: StripOptions): Promise<Cont
     keptBytes: src.size - collected.droppedBytes,
     ok,
   };
-}
-
-function buildJumbfFindings(payloads: Uint8Array[], bytes: number): Finding[] {
-  const candidates: Uint8Array[] = [];
-  for (const payload of payloads) {
-    candidates.push(payload);
-    if (payload.length > 2 && payload[0] === 0x4a && payload[1] === 0x50) candidates.push(payload.subarray(2));
-    if (payload.length > 4) candidates.push(payload.subarray(4));
-  }
-  const boxes: JumbfBox[] = [];
-  for (const candidate of candidates) {
-    try {
-      const parsed = parseJumbf(candidate);
-      if (parsed.length > 0) boxes.push(...parsed);
-    } catch {
-      /* ignore malformed segment */
-    }
-  }
-  const summary = summarizeC2pa(boxes, bytes);
-  if (!summary.present) {
-    return [
-      {
-        id: 'finding.jumbf',
-        category: 'c2pa',
-        severity: 'high',
-        bytes,
-        params: { segments: payloads.length },
-      },
-    ];
-  }
-  return buildC2paFindings(summary);
 }
 
 async function classifySegment(

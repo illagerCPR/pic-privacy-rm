@@ -9,7 +9,7 @@ const FORMATS: Record<Format, { mime: string; ext: string; supported: boolean }>
   webp: { mime: 'image/webp', ext: 'webp', supported: true },
   gif: { mime: 'image/gif', ext: 'gif', supported: true },
   avif: { mime: 'image/avif', ext: 'avif', supported: false },
-  heic: { mime: 'image/heic', ext: 'heic', supported: false },
+  heic: { mime: 'image/heic', ext: 'heic', supported: true },
   tiff: { mime: 'image/tiff', ext: 'tif', supported: false },
   bmp: { mime: 'image/bmp', ext: 'bmp', supported: false },
   jxl: { mime: 'image/jxl', ext: 'jxl', supported: false },

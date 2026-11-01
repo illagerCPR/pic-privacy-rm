@@ -11,10 +11,12 @@
 import { ascii, concatBytes, decodeText, startsWithBytes, u16be, u32be, u32le } from './bytes.ts';
 import { summarizeC2pa } from './c2pa.ts';
 import { stripXmpMagic } from './gif.ts';
+import { readHeifStructure } from './heif.ts';
 import { parsePhotoshopApp13 } from './iptc.ts';
 import { parseJumbf } from './jumbf.ts';
 import {
   inspectExifBlock,
+  inspectTiff,
   makeReport,
   type MetadataGroup,
   type MetadataItem,
@@ -22,8 +24,11 @@ import {
 } from './metadata.ts';
 import { readAt, type Source } from './source.ts';
 import { sniff } from './sniff.ts';
+import { parseTiff } from './tiff.ts';
 import type { FormatInfo } from './types.ts';
 import { parseXmp } from './xmp.ts';
+
+const MAX_INSPECT_ITEM = 8 * 1024 * 1024;
 
 export interface InspectOptions {
   /** Mirrors the strip setting so the listing can say what survives. */
@@ -461,6 +466,55 @@ async function inspectGif(src: Source): Promise<MetadataGroup[]> {
   return finish(groups, text, container);
 }
 
+/**
+ * HEIF keeps metadata as ordinary items, so the listing is the item table
+ * itself: every surviving picture item, plus the Exif and XMP items that the
+ * strip pass removes.
+ */
+async function inspectHeif(src: Source): Promise<MetadataGroup[]> {
+  const structure = await readHeifStructure(src);
+  if (!structure) return [];
+
+  const groups: MetadataGroup[] = [];
+  const container: MetadataItem[] = [];
+
+  for (const item of structure.items) {
+    const kept = item.kind === 'image';
+    const parts = [`${item.length} B`];
+    if (item.method === 1) parts.push('in idat');
+    if (item.info.contentType) parts.push(item.info.contentType);
+    container.push({
+      name: `Item ${item.info.id} · ${item.info.type || 'unknown'}`,
+      value: parts.join(' · '),
+      size: item.length,
+      removed: kept ? false : true,
+    });
+  }
+
+  for (const item of structure.items) {
+    if (item.length === 0 || item.length > MAX_INSPECT_ITEM) continue;
+    if (item.kind === 'exif') {
+      const payload = await readAt(src, item.start, item.length);
+      const tiffStart = 4 + (payload.length >= 4 ? u32be(payload, 0) : 0);
+      if (tiffStart >= payload.length) continue;
+      const tiff = parseTiff(payload.subarray(tiffStart));
+      if (tiff) groups.push(...inspectTiff(tiff, true));
+      else {
+        groups.push(
+          group('exif', [
+            { name: 'Exif item', value: `(${payload.length} bytes, structure not readable)`, size: payload.length },
+          ]),
+        );
+      }
+    } else if (item.kind === 'xmp') {
+      const payload = await readAt(src, item.start, item.length);
+      groups.push(...xmpGroups(payload));
+    }
+  }
+
+  return finish(groups, [], container);
+}
+
 /* ------------------------------------------------------------------ *
  * Entry point
  * ------------------------------------------------------------------ */
@@ -480,6 +534,9 @@ export async function inspectSource(src: Source, opts: InspectOptions): Promise<
       break;
     case 'gif':
       groups = await inspectGif(src);
+      break;
+    case 'heic':
+      groups = await inspectHeif(src);
       break;
     default:
       groups = [];

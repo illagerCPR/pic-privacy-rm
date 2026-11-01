@@ -1,7 +1,8 @@
 /** Builders that turn parsed metadata into UI findings. Shared by all containers. */
-import type { C2paSummary } from './c2pa.ts';
+import { summarizeC2pa, type C2paSummary } from './c2pa.ts';
 import type { ExifSummary } from './exif.ts';
 import type { IptcSummary } from './iptc.ts';
+import { parseJumbf, type JumbfBox } from './jumbf.ts';
 import type { XmpSummary } from './xmp.ts';
 import type { Finding } from './types.ts';
 
@@ -107,6 +108,44 @@ export function buildIptcFindings(iptc: IptcSummary): Finding[] {
     ];
   }
   return [];
+}
+
+/**
+ * Turn raw JUMBF payloads into findings.
+ *
+ * Containers disagree about the wrapper around the superbox (a bare superbox,
+ * a two-byte `JP` prefix, or a length offset), so every plausible start is
+ * tried before giving up and reporting an unparsed block.
+ */
+export function buildJumbfFindings(payloads: readonly Uint8Array[], bytes: number): Finding[] {
+  const candidates: Uint8Array[] = [];
+  for (const payload of payloads) {
+    candidates.push(payload);
+    if (payload.length > 2 && payload[0] === 0x4a && payload[1] === 0x50) candidates.push(payload.subarray(2));
+    if (payload.length > 4) candidates.push(payload.subarray(4));
+  }
+  const boxes: JumbfBox[] = [];
+  for (const candidate of candidates) {
+    try {
+      const parsed = parseJumbf(candidate);
+      if (parsed.length > 0) boxes.push(...parsed);
+    } catch {
+      /* ignore malformed segment */
+    }
+  }
+  const summary = summarizeC2pa(boxes, bytes);
+  if (!summary.present) {
+    return [
+      {
+        id: 'finding.jumbf',
+        category: 'c2pa',
+        severity: 'high',
+        bytes,
+        params: { segments: payloads.length },
+      },
+    ];
+  }
+  return buildC2paFindings(summary);
 }
 
 export function buildC2paFindings(summary: C2paSummary): Finding[] {

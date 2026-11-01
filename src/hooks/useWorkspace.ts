@@ -159,9 +159,19 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     async (item: Item) => {
       try {
         const scan = await scanLimit(() => pipeline.scan(item.file));
+        // A container the parser rejects is not "clean": saying so would offer a
+        // download of a file we never actually read.
+        const broken = scan.warnings.find((warning) => warning.severity === 'error');
         patchItem(item.id, {
           scan,
-          state: !scan.supported ? 'unsupported' : isSensitive(scan) ? 'ready' : 'clean',
+          state: !scan.supported
+            ? 'unsupported'
+            : broken
+              ? 'failed'
+              : isSensitive(scan)
+                ? 'ready'
+                : 'clean',
+          error: broken ? broken.id : undefined,
         });
       } catch (error) {
         patchItem(item.id, {

@@ -98,7 +98,7 @@ export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Prop
 
   return (
     <li className={`file-row file-row--${item.state}`}>
-      <div className="thumb">
+      <div className="thumb" title={item.scan?.format === 'heic' ? t('notice.heif.preview') : undefined}>
         {!thumbBroken ? (
           <img
             src={item.previewUrl}

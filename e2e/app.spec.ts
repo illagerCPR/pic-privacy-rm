@@ -112,13 +112,31 @@ test('switches language and keeps the layout intact', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toContainText('移除照片');
 });
 
-test('refuses unsupported files without pretending to clean them', async ({ page }) => {
+test('refuses a container it cannot read instead of calling it clean', async ({ page }) => {
   await page.goto('/');
   await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'fake.heic')]);
   const row = page.locator('.file-row').first();
+  await expect(row).toHaveClass(/file-row--failed/, { timeout: 15_000 });
+  await expect(row).toContainText('不是有效的 HEIF');
+  // No download action may be offered for a file we never read.
+  await expect(row.getByRole('button', { name: /下载/ })).toHaveCount(0);
+});
+
+test('refuses unsupported formats without pretending to clean them', async ({ page }) => {
+  // AVIF shares the HEIF container but is not a supported format yet.
+  const avif = new Uint8Array(32);
+  avif.set([0, 0, 0, 0x20], 0);
+  avif.set(new TextEncoder().encode('ftypavif'), 4);
+  avif.set(new TextEncoder().encode('mif1'), 16);
+  mkdirSync(outDir, { recursive: true });
+  const path = join(outDir, 'fake.avif');
+  writeFileSync(path, avif);
+
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [path]);
+  const row = page.locator('.file-row').first();
   await expect(row).toHaveClass(/file-row--unsupported/, { timeout: 15_000 });
   await expect(row).toContainText('不支持');
-  // No download action may be offered.
   await expect(row.getByRole('button', { name: /下载/ })).toHaveCount(0);
 });
 

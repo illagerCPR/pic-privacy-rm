@@ -112,11 +112,19 @@ describe('detection', () => {
   });
 
   it('reports unsupported formats instead of pretending to clean them', async () => {
-    const heic = await scan('fake.heic');
-    expect(heic.supported).toBe(false);
-    expect(heic.warnings[0]?.id).toBe('warn.unsupported');
     const txt = await scan('note.txt');
     expect(txt.supported).toBe(false);
+    expect(txt.warnings[0]?.id).toBe('warn.unsupported');
+  });
+
+  it('refuses a HEIC it cannot read instead of calling it clean', async () => {
+    // `fake.heic` is a bare ftyp with no item table: the format is supported,
+    // but this particular file is not readable.
+    const heic = await scan('fake.heic');
+    expect(heic.supported).toBe(true);
+    expect(heic.warnings.some((warning) => warning.severity === 'error')).toBe(true);
+    expect(heic.droppedBytes).toBe(0);
+    await expect(stripSource(sourceFromBytes(fixture('fake.heic')))).rejects.toThrow(/unreadable|unsupported/);
   });
 });
 

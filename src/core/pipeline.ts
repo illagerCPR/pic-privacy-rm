@@ -1,5 +1,6 @@
 /** Orchestration: sniff → analyse → (strip) → (verify). */
 import { analyzeGif } from './gif.ts';
+import { analyzeHeif } from './heif.ts';
 import { analyzeJpeg } from './jpeg.ts';
 import { analyzePng } from './png.ts';
 import { analyzeWebp } from './webp.ts';
@@ -21,11 +22,11 @@ const ANALYSERS: Record<string, (src: Source, opts: StripOptions) => Promise<Con
   png: analyzePng,
   webp: analyzeWebp,
   gif: analyzeGif,
+  heic: analyzeHeif,
 };
 
 const UNSUPPORTED_FORMAT_NAMES: Partial<Record<Format, string>> = {
   avif: 'AVIF',
-  heic: 'HEIC',
   tiff: 'TIFF',
   bmp: 'BMP',
   jxl: 'JPEG XL',

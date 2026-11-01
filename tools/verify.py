@@ -11,6 +11,7 @@ Exit code is non-zero if any check fails.
 from __future__ import annotations
 
 import io
+import subprocess
 import sys
 from pathlib import Path
 
@@ -87,12 +88,82 @@ def pixels(path: Path) -> bytes:
         return im.convert("RGB").tobytes(), im.size
 
 
+def heif_frame(path: Path) -> bytes:
+    """Decode the primary picture of a HEIF container with ffmpeg.
+
+    `0:g:0` selects the tile grid (the real picture); a file without one falls
+    back to the first video stream. Selecting the grid also proves the rebuild
+    kept the grid mapping: a broken one decodes to a single tile instead.
+    """
+    for selector in ("0:g:0", "0:v:0"):
+        proc = subprocess.run(
+            [
+                "ffmpeg", "-v", "error", "-i", str(path),
+                "-map", selector, "-frames:v", "1",
+                "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+            ],
+            capture_output=True,
+        )
+        if proc.returncode == 0 and proc.stdout:
+            return proc.stdout
+    return b""
+
+
+def heif_streams(path: Path) -> list[str]:
+    """Container-level stream description, for files whose codec payload is a stub."""
+    proc = subprocess.run(
+        [
+            "ffprobe", "-v", "error",
+            "-show_entries", "stream=index,codec_name,width,height",
+            "-of", "csv=p=0", str(path),
+        ],
+        capture_output=True,
+    )
+    return [line for line in proc.stdout.decode(errors="replace").splitlines() if line.strip()]
+
+
+def heif_check(name: str, src: Path, out: Path) -> list[str]:
+    """Pillow cannot open HEIF, so ffmpeg stands in as the independent decoder."""
+    problems: list[str] = []
+    if not out.exists():
+        return [f"{name}: missing stripped output"]
+
+    before = heif_frame(src)
+    after = heif_frame(out)
+    if before or after:
+        if not before:
+            return [f"{name}: source does not decode with ffmpeg (skipped)"]
+        if not after:
+            problems.append(f"{name}: output does not decode with ffmpeg")
+        elif before != after:
+            problems.append(f"{name}: picture data changed after stripping")
+    else:
+        # ExifTool's samples carry stub payloads: compare the container's
+        # declared streams instead of pixels.
+        source_streams = heif_streams(src)
+        out_streams = heif_streams(out)
+        if source_streams != out_streams:
+            problems.append(f"{name}: stream layout changed {source_streams} -> {out_streams}")
+
+    data = out.read_bytes()
+    for marker, label in (
+        (b"Exif\x00\x00", "Exif item"),
+        (b"x:xmpmeta", "XMP item"),
+        (b"rdf:RDF", "XMP item"),
+    ):
+        if marker in data:
+            problems.append(f"{name}: found {label}")
+    return problems
+
+
 def check(name: str, src_dir: Path = FIXTURES, out_dir: Path = OUTPUT) -> list[str]:
     problems: list[str] = []
     src = src_dir / name
     out = out_dir / name
     if not out.exists():
         return [f"{name}: missing stripped output"]
+    if name.lower().endswith((".heic", ".heif")):
+        return heif_check(name, src, out)
 
     try:
         with Image.open(out) as im:
