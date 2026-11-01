@@ -7,7 +7,7 @@ import { bakeOrientation } from '../lib/bake.ts';
 import { createToken, runBatch, type BatchToken } from '../lib/batch.ts';
 import { archiveName, downloadBlob } from '../lib/download.ts';
 import { buildZip, ZipError, type ZipEntry } from '../lib/zip.ts';
-import { buildReport, reportFileName } from '../lib/report.ts';
+import { batchReportName, buildBatchReport, buildReport, reportFileName, type ReportInput } from '../lib/report.ts';
 import { looksLikeImage, outputName, sortFilesByName, uniqueName } from '../lib/files.ts';
 import { createLimiter } from '../lib/queue.ts';
 
@@ -45,6 +45,13 @@ export interface Item {
 
 export interface NotifyFn {
   (key: string, params?: Record<string, string | number>): void;
+}
+
+/** A long job that reports movement while it runs outside the strip queue. */
+export interface JobProgress {
+  kind: 'zip' | 'report';
+  done: number;
+  total: number;
 }
 
 interface Settings {
@@ -97,6 +104,8 @@ export interface Workspace {
   downloadAll: () => Promise<void>;
   /** Write a reproducible JSON report of what the engine saw and did. */
   exportReport: (id: string) => Promise<void>;
+  /** The same for every file that has a scan, as one document. */
+  exportBatchReport: () => Promise<void>;
   /** Full metadata listing, parsed lazily and cached per item. */
   inspectItem: (id: string) => Promise<MetadataReport | null>;
   /** The same listing for the stripped output, used by the before/after view. */
@@ -107,8 +116,8 @@ export interface Workspace {
   setBake: (value: boolean) => void;
   busy: boolean;
   progress: { done: number; total: number } | null;
-  /** Members packed so far while the archive is assembled, null when idle. */
-  packing: { done: number; total: number } | null;
+  /** Packaging or report building in flight, null when idle. */
+  job: JobProgress | null;
   /** True once a batch has been asked to stop but a file is still finishing. */
   cancelling: boolean;
   cancelBatch: () => void;
@@ -120,9 +129,9 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [packing, setPacking] = useState<{ done: number; total: number } | null>(null);
+  const [job, setJob] = useState<JobProgress | null>(null);
   const batchRef = useRef<BatchToken | null>(null);
-  const packingRef = useRef(false);
+  const jobRef = useRef(false);
   const itemsRef = useRef<Item[]>([]);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -438,7 +447,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   );
 
   const downloadAll = useCallback(async () => {
-    if (packingRef.current) return;
+    if (jobRef.current) return;
     const ready: ZipEntry[] = [];
     const taken = new Set<string>();
     for (const item of itemsRef.current) {
@@ -450,20 +459,63 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
       notify('error.noFiles');
       return;
     }
-    packingRef.current = true;
-    setPacking({ done: 0, total: ready.length });
+    jobRef.current = true;
+    setJob({ kind: 'zip', done: 0, total: ready.length });
     try {
-      const archive = await buildZip(ready, (tick) => setPacking({ done: tick.done, total: tick.total }));
+      const archive = await buildZip(ready, (tick) => setJob({ kind: 'zip', done: tick.done, total: tick.total }));
       downloadBlob(archive, archiveName());
       notify('toast.zipDone');
     } catch (error) {
       const tooLarge = error instanceof ZipError && error.code === 'archive-too-large';
       notify(tooLarge ? 'error.zipTooLarge' : 'error.zipFailed');
     } finally {
-      packingRef.current = false;
-      setPacking(null);
+      jobRef.current = false;
+      setJob(null);
     }
   }, [notify, passthroughResult]);
+
+  const exportBatchReport = useCallback(async () => {
+    if (jobRef.current) return;
+    const targets: ReportInput[] = [];
+    for (const item of itemsRef.current) {
+      if (!item.scan) continue;
+      const result = item.result;
+      targets.push({
+        file: item.file,
+        scan: item.scan,
+        options: settingsRef.current.options,
+        bake: settingsRef.current.bake,
+        result: result
+          ? {
+              size: result.size,
+              filename: result.filename,
+              removed: result.removed,
+              removedBytes: result.removedBytes,
+              reencoded: result.reencoded,
+              verify: result.verify,
+            }
+          : undefined,
+      });
+    }
+    if (targets.length === 0) {
+      notify('error.noFiles');
+      return;
+    }
+    jobRef.current = true;
+    setJob({ kind: 'report', done: 0, total: targets.length });
+    try {
+      const json = await buildBatchReport(targets, (done, total) =>
+        setJob({ kind: 'report', done, total }),
+      );
+      downloadBlob(new Blob([json], { type: 'application/json' }), batchReportName());
+      notify('toast.reportBatch');
+    } catch {
+      notify('error.reportFailed');
+    } finally {
+      jobRef.current = false;
+      setJob(null);
+    }
+  }, [notify]);
 
   const setOptions = useCallback((patch: Partial<StripOptions>) => {
     setSettings((prev) => ({ ...prev, options: { ...prev.options, ...patch } }));
@@ -488,6 +540,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     downloadItem,
     downloadAll,
     exportReport,
+    exportBatchReport,
     inspectItem,
     inspectResult,
     options: settings.options,
@@ -496,7 +549,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     setBake,
     busy,
     progress,
-    packing,
+    job,
     cancelling,
     cancelBatch,
   };

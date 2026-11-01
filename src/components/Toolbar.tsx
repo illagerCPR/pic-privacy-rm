@@ -1,7 +1,8 @@
 import type { StripOptions } from '../core/types.ts';
+import type { JobProgress } from '../hooks/useWorkspace.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { formatBytes } from '../lib/format.ts';
-import { AlertIcon, DownloadIcon, SparkIcon, TrashIcon } from './Icons.tsx';
+import { AlertIcon, DownloadIcon, FileIcon, SparkIcon, TrashIcon } from './Icons.tsx';
 
 export interface Stats {
   total: number;
@@ -21,13 +22,15 @@ interface Props {
   orientationCount: number;
   onStripAll: () => void;
   onDownloadAll: () => void;
+  onExportBatchReport: () => void;
+  canExportBatch: boolean;
   onClear: () => void;
   onCancelBatch: () => void;
   cancelling: boolean;
   busy: boolean;
   progress: { done: number; total: number } | null;
-  /** Set while the archive is being assembled, so a big batch shows movement. */
-  packing: { done: number; total: number } | null;
+  /** Packaging or report building, so a long batch shows movement. */
+  job: JobProgress | null;
   canStripAll: boolean;
   canDownloadAll: boolean;
 }
@@ -59,9 +62,9 @@ function Toggle(props: {
 
 export function Toolbar(props: Props) {
   const { t } = useI18n();
-  const { stats, progress, packing } = props;
+  const { stats, progress, job } = props;
   const percent = progress && progress.total > 0 ? (progress.done / progress.total) * 100 : 0;
-  const packingPercent = packing && packing.total > 0 ? (packing.done / packing.total) * 100 : 0;
+  const jobPercent = job && job.total > 0 ? (job.done / job.total) * 100 : 0;
 
   return (
     <div className="toolbar-wrap">
@@ -98,10 +101,19 @@ export function Toolbar(props: Props) {
             type="button"
             className="btn btn--ghost"
             onClick={props.onDownloadAll}
-            disabled={!props.canDownloadAll || packing !== null}
+            disabled={!props.canDownloadAll || job !== null}
           >
             <DownloadIcon size={17} />
             {t('actions.downloadAll')}
+          </button>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={props.onExportBatchReport}
+            disabled={!props.canExportBatch || job !== null}
+          >
+            <FileIcon size={16} />
+            {t('actions.exportBatchReport')}
           </button>
           <button type="button" className="btn btn--quiet" onClick={props.onClear} disabled={props.busy}>
             <TrashIcon size={16} />
@@ -129,13 +141,18 @@ export function Toolbar(props: Props) {
         </div>
       )}
 
-      {packing && (
-        <div className="progress" role="status" aria-live="polite" aria-label={t('a11y.packing')}>
+      {job && (
+        <div
+          className="progress"
+          role="status"
+          aria-live="polite"
+          aria-label={t(job.kind === 'zip' ? 'a11y.packing' : 'a11y.reporting')}
+        >
           <div className="progress-track">
-            <div className="progress-bar" style={{ width: `${packingPercent}%` }} />
+            <div className="progress-bar" style={{ width: `${jobPercent}%` }} />
           </div>
           <span className="progress-text">
-            {t('status.packing')} {packing.done} / {packing.total}
+            {t(job.kind === 'zip' ? 'status.packing' : 'status.reporting')} {job.done} / {job.total}
           </span>
         </div>
       )}

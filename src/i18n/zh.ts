@@ -34,12 +34,14 @@ export const zh = {
   'actions.download': '下载',
   'actions.report': '导出报告',
   'actions.downloadAll': '下载全部 (.zip)',
+  'actions.exportBatchReport': '导出批量报告',
   'actions.details': '详情',
   'actions.clear': '清空',
   'actions.cancel': '取消',
   'actions.cancelBatch': '取消批量清理',
   'status.cancelling': '取消中…',
   'status.packing': '打包中',
+  'status.reporting': '生成报告',
   'actions.retry': '重试',
   'actions.close': '关闭',
   'actions.remove': '移除',
@@ -195,6 +197,7 @@ export const zh = {
   'error.worker': '后台线程不可用，已切换到主线程',
   'error.zipFailed': '打包失败',
   'error.zipTooLarge': '压缩包会超过 4 GB 上限，请分批下载',
+  'error.reportFailed': '报告生成失败',
 
   'toast.added': '已添加 {n} 个文件',
   'toast.skipped': '跳过 {n} 个不支持的文件',
@@ -202,6 +205,7 @@ export const zh = {
   'toast.cancelRequested': '已停止排队，正在处理的这一张会做完',
   'toast.batchCancelled': '批量清理已取消：完成 {n} 个，剩余 {left} 个未处理',
   'toast.zipDone': '压缩包已开始下载',
+  'toast.reportBatch': '批量报告已开始下载',
   'toast.copied': '已复制',
   'toast.report': '报告已导出，其中包含文件元数据，请勿公开分享',
   'toast.orientationLost': '{n} 个文件的方向标签已删除，若显示为横躺可开启「把方向写入像素」重新清理',
@@ -315,6 +319,7 @@ export const zh = {
   'a11y.remove': '从列表移除',
   'a11y.progress': '处理进度',
   'a11y.packing': '打包进度',
+  'a11y.reporting': '报告生成进度',
 } as const;
 
 export type MessageKey = keyof typeof zh;

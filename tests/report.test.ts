@@ -5,7 +5,14 @@ import { describe, expect, it } from 'vitest';
 
 import { scanFile, stripFile } from '../src/core/pipeline.ts';
 import { DEFAULT_STRIP_OPTIONS } from '../src/core/types.ts';
-import { buildReport, REPORT_SCHEMA, reportFileName } from '../src/lib/report.ts';
+import {
+  BATCH_SCHEMA,
+  batchReportName,
+  buildBatchReport,
+  buildReport,
+  REPORT_SCHEMA,
+  reportFileName,
+} from '../src/lib/report.ts';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const bytes = new Uint8Array(readFileSync(FIXTURES + 'meta.jpg'));
@@ -70,6 +77,31 @@ describe('diagnostic report', () => {
     expect(report.result.removedBytes).toBeGreaterThan(0);
     expect(report.result.verify.ok).toBe(true);
     expect(report.result.verify.leftovers).toEqual([]);
+  });
+
+  it('packs every file into one batch document', async () => {
+    const scan = await scanFile(file);
+    const progress: number[] = [];
+    const json = await buildBatchReport(
+      [
+        { file, scan, options: DEFAULT_STRIP_OPTIONS, bake: false },
+        { file, scan, options: DEFAULT_STRIP_OPTIONS, bake: false },
+      ],
+      (done) => progress.push(done),
+    );
+    const doc = JSON.parse(json) as any;
+
+    expect(doc.schema).toBe(BATCH_SCHEMA);
+    expect(doc.count).toBe(2);
+    expect(doc.files).toHaveLength(2);
+    // Each entry stands alone: the same body a single export would produce.
+    expect(doc.files[0].schema).toBe(REPORT_SCHEMA);
+    expect(doc.files[1].file.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
+    expect(progress).toEqual([1, 2]);
+  });
+
+  it('names the batch document after the moment it was built', () => {
+    expect(batchReportName(new Date(2026, 10, 1, 9, 5))).toBe('picprivacy-reports-20261101-0905.json');
   });
 
   it('names the file after the original', () => {

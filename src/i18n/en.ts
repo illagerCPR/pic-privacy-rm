@@ -35,12 +35,14 @@ export const en: Dict = {
   'actions.download': 'Download',
   'actions.report': 'Export report',
   'actions.downloadAll': 'Download all (.zip)',
+  'actions.exportBatchReport': 'Export batch report',
   'actions.details': 'Details',
   'actions.clear': 'Clear',
   'actions.cancel': 'Cancel',
   'actions.cancelBatch': 'Stop cleaning',
   'status.cancelling': 'Stopping…',
   'status.packing': 'Packing',
+  'status.reporting': 'Writing report',
   'actions.retry': 'Retry',
   'actions.close': 'Close',
   'actions.remove': 'Remove',
@@ -200,6 +202,7 @@ export const en: Dict = {
   'error.worker': 'Background worker unavailable, using the main thread',
   'error.zipFailed': 'Could not build the archive',
   'error.zipTooLarge': 'The archive would exceed 4 GB — download it in smaller batches',
+  'error.reportFailed': 'Could not build the report',
 
   'toast.added': 'Added {n} files',
   'toast.skipped': 'Skipped {n} unsupported files',
@@ -207,6 +210,7 @@ export const en: Dict = {
   'toast.cancelRequested': 'Queue stopped; the file in flight will finish',
   'toast.batchCancelled': 'Batch cancelled: {n} cleaned, {left} left untouched',
   'toast.zipDone': 'Archive download started',
+  'toast.reportBatch': 'Batch report download started',
   'toast.copied': 'Copied',
   'toast.report': 'Report exported — it contains file metadata, do not share it publicly',
   'toast.orientationLost':
@@ -322,4 +326,5 @@ export const en: Dict = {
   'a11y.remove': 'Remove from list',
   'a11y.progress': 'Processing progress',
   'a11y.packing': 'Archive progress',
+  'a11y.reporting': 'Report progress',
 };

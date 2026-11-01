@@ -471,3 +471,67 @@ test('packages a long batch and every member matches the single-file download', 
   }
   expect(consoleErrors).toEqual([]);
 });
+
+test('traps keyboard focus inside the drawer and gives it back', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  const trigger = page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]');
+  await trigger.focus();
+  await trigger.click();
+
+  const drawer = page.locator('.drawer');
+  await expect(drawer).toBeVisible();
+  await expect(drawer).toBeFocused();
+
+  // Every Tab stays inside the panel, including the wrap past the last control.
+  for (let step = 1; step <= 25; step += 1) {
+    await page.keyboard.press('Tab');
+    const inside = await page.evaluate(() => Boolean(document.activeElement?.closest('.drawer')));
+    expect(inside, `focus escaped after ${step} tab(s)`).toBe(true);
+  }
+  for (let step = 1; step <= 5; step += 1) {
+    await page.keyboard.press('Shift+Tab');
+    const inside = await page.evaluate(() => Boolean(document.activeElement?.closest('.drawer')));
+    expect(inside, `focus escaped after ${step} shift+tab(s)`).toBe(true);
+  }
+
+  await page.keyboard.press('Escape');
+  await expect(drawer).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test('exports one report per file in a single document', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [
+    join(fixtures, 'meta.jpg'),
+    join(fixtures, 'plain.jpg'),
+  ]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done, .file-row--clean')).toHaveCount(2, { timeout: 30_000 });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出批量报告' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^picprivacy-reports-\d{8}-\d{4}\.json$/);
+
+  const path = join(outDir, 'batch-report.json');
+  await download.saveAs(path);
+  const doc = JSON.parse(readFileSync(path, 'utf8'));
+
+  expect(doc.schema).toBe('picprivacy.batch/1');
+  expect(doc.count).toBe(2);
+  expect(doc.files.map((entry: any) => entry.file.name)).toEqual(['meta.jpg', 'plain.jpg']);
+  // Each entry is a complete report, and only the cleaned one has a result.
+  expect(doc.files[0].schema).toBe('picprivacy.report/1');
+  expect(doc.files[0].result.verify.ok).toBe(true);
+  expect(doc.files[1].result).toBeUndefined();
+  expect(doc.files[1].file.sha256).toBe(
+    createHash('sha256').update(readFileSync(join(fixtures, 'plain.jpg'))).digest('hex'),
+  );
+});

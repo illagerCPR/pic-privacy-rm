@@ -179,12 +179,14 @@ export default function App() {
               orientationCount={orientationCount}
               onStripAll={() => void workspace.stripAll()}
               onDownloadAll={() => void workspace.downloadAll()}
+              onExportBatchReport={() => void workspace.exportBatchReport()}
+              canExportBatch={items.some((item) => Boolean(item.scan))}
               onClear={workspace.clear}
               onCancelBatch={workspace.cancelBatch}
               cancelling={workspace.cancelling}
               busy={workspace.busy}
               progress={workspace.progress}
-              packing={workspace.packing}
+              job={workspace.job}
               canStripAll={canStripAll}
               canDownloadAll={canDownloadAll}
             />

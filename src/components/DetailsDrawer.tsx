@@ -251,6 +251,9 @@ export function DetailsDrawer({
 
   // Before/after comparison. The stripped listing is fetched on demand too,
   // even later than the source one: most people never open this view.
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
+
   const [compareOn, setCompareOn] = useState(false);
   const [after, setAfter] = useState<{
     loading: boolean;
@@ -320,6 +323,20 @@ export function DetailsDrawer({
     };
   }, [compareOn, itemId, resultBlob, onLoadResultMetadata]);
 
+  // Focus moves into the dialog when it opens, so Tab does not keep walking the
+  // page behind it, and goes back to the button that opened it on close.
+  useEffect(() => {
+    if (!itemId) return undefined;
+    const active = document.activeElement;
+    openerRef.current = active instanceof HTMLElement ? active : null;
+    dialogRef.current?.focus();
+    return () => {
+      const opener = openerRef.current;
+      openerRef.current = null;
+      if (opener?.isConnected) opener.focus();
+    };
+  }, [itemId]);
+
   useEffect(() => {
     if (!item) return undefined;
     const onKey = (event: KeyboardEvent) => {
@@ -328,6 +345,39 @@ export function DetailsDrawer({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [item, onClose]);
+
+  // A modal dialog has to wrap Tab at both ends, otherwise focus lands on the
+  // page underneath a panel the user cannot see.
+  const trapTab = (event: React.KeyboardEvent<HTMLElement>): void => {
+    if (event.key !== 'Tab') return;
+    const root = event.currentTarget;
+    const nodes = Array.from(
+      root.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ),
+    ).filter((node) => node.getClientRects().length > 0);
+    const first = nodes[0];
+    const last = nodes[nodes.length - 1];
+    if (!first || !last) {
+      event.preventDefault();
+      return;
+    }
+    const active = document.activeElement;
+    if (!(active instanceof Node) || !root.contains(active)) {
+      event.preventDefault();
+      first.focus();
+      return;
+    }
+    if (event.shiftKey && (active === first || active === root)) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   if (!item) return null;
 
@@ -340,10 +390,13 @@ export function DetailsDrawer({
     <div className="drawer-layer">
       <div className="drawer-backdrop" role="presentation" onClick={onClose} />
       <aside
+        ref={dialogRef}
         className="drawer"
         role="dialog"
         aria-modal="true"
         aria-label={t('drawer.title')}
+        tabIndex={-1}
+        onKeyDown={trapTab}
         data-wide={tab === 'meta' && compareOn ? 'true' : undefined}
       >
         <header className="drawer-head">
