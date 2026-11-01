@@ -10,16 +10,22 @@
  * byte, so LZW, Deflate, PackBits, JPEG-in-TIFF and vendor codecs all pass
  * through untouched, and the output stays bit-identical where it matters.
  *
+ * Every page of a multi-page file is rebuilt and re-linked; a reduced-resolution
+ * directory (a thumbnail) is dropped, because it is a second copy of a picture
+ * we are about to clean. New-style JPEG strips are run through the JPEG engine
+ * so no inner APPn survives either.
+ *
  * Deliberate refusals (better a clear error than a broken scan):
  *   - BigTIFF (magic 43) — 64-bit offsets are a different layout
- *   - multi-directory files — every page needs its own relocated data
- *   - SubIFDs, DNG, CR2 and CFA/lossless-JPEG raws — we cannot relocate them safely
+ *   - old-style JPEG (compression 6) — the stream hides behind tag 0x0201
+ *   - SubIFDs, DNG, CR2 and CFA raws — we cannot relocate those trees safely
  */
-import { startsWithBytes, u16be, u16le, u32be, u32le } from './bytes.ts';
+import { indexOfBytes, startsWithBytes, u16be, u16le, u32be, u32le } from './bytes.ts';
 import { buildIptcFindings, buildXmpFindings } from './findings.ts';
 import { describeGps } from './gps.ts';
+import { analyzeJpeg } from './jpeg.ts';
 import { parsePhotoshopResources, summarizeIim, type IptcSummary } from './iptc.ts';
-import { readAt, type Source } from './source.ts';
+import { readAt, sourceFromBytes, type Source } from './source.ts';
 import { tagName } from './tag-names.ts';
 import { decodeTiffValue, TIFF_TYPE_SIZE, type TiffIfd, type TiffTag } from './tiff.ts';
 import type {
@@ -305,6 +311,94 @@ async function ifdFields(
  * Analyser
  * ------------------------------------------------------------------ */
 
+type Payload =
+  | { kind: 'slice'; start: number; end: number }
+  | { kind: 'bytes'; bytes: Uint8Array };
+
+interface Segment {
+  /** Source range of the segment. */
+  start: number;
+  count: number;
+  /** What actually gets written: the source slice, or a cleaned stream. */
+  output: Payload;
+  /** Assigned during layout. */
+  at: number;
+}
+
+interface Prepared {
+  dir: RawIfd;
+  index: number;
+  kept: RawEntry[];
+  dropped: RawEntry[];
+  offsetsTag: number;
+  countsTag: number;
+  segments: Segment[];
+  /** Assigned during layout. */
+  dirOffset: number;
+}
+
+interface Thumbnail {
+  dir: RawIfd;
+  index: number;
+  bytes: number;
+  /** A JPEG preview can be shown; a reduced-resolution page cannot. */
+  preview?: { start: number; count: number };
+}
+
+const JPEG_PREVIEW = 0x0201;
+const JPEG_PREVIEW_LENGTH = 0x0202;
+const JPEG_TABLES = 0x015b;
+const SUBFILE_TYPE = 0x00fe;
+
+const MAX_PAGES = 1024; // safety net only: scanned documents can be long
+const MAX_INNER_JPEG = 64 << 20;
+
+/** Layout bookkeeping for one page: where its directory and values go. */
+interface PageLayout {
+  dirOffset: number;
+  valueAt: Map<number, number>;
+  pads: Map<number, number>;
+  /** Padding between the value area and the image data. */
+  dataPad: number;
+}
+
+function isComputed(page: Prepared, entry: RawEntry): boolean {
+  return entry.tag === page.offsetsTag || entry.tag === page.countsTag;
+}
+
+function outLength(page: Prepared, entry: RawEntry): number {
+  return isComputed(page, entry) ? page.segments.length * 4 : entry.size;
+}
+
+function inlineOut(page: Prepared, entry: RawEntry): boolean {
+  return outLength(page, entry) <= 4;
+}
+
+function assembleParts(parts: Part[], source: Uint8Array): Uint8Array {
+  const total = parts.reduce(
+    (sum, part) => sum + (part.kind === 'slice' ? part.end - part.start : part.bytes.length),
+    0,
+  );
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const part of parts) {
+    if (part.kind === 'slice') {
+      out.set(source.subarray(part.start, part.end), at);
+      at += part.end - part.start;
+    } else {
+      out.set(part.bytes, at);
+      at += part.bytes.length;
+    }
+  }
+  return out;
+}
+
+function containsMarker(bytes: Uint8Array, text: string): boolean {
+  const needle = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i += 1) needle[i] = text.charCodeAt(i) & 0xff;
+  return indexOfBytes(bytes, needle) >= 0;
+}
+
 export async function analyzeTiff(src: Source, opts: StripOptions): Promise<ContainerAnalysis> {
   const fail = (id: string, params?: Record<string, string | number>): ContainerAnalysis =>
     failed([{ id, severity: 'error', params }], src.size);
@@ -323,154 +417,237 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
   // Canon raw files wear a TIFF header and only differ at offset 8.
   if (startsWithBytes(head, 8, 'CR')) return fail('warn.tiff.raw', { format: 'CR2' });
 
-  const ifd0Offset = little ? u32le(head, 4) : u32be(head, 4);
-  const ifd0 = await readIfd(src, ifd0Offset, little);
-  if (!ifd0) return fail('warn.tiff.noIfd');
-  if (ifd0.next !== 0) return fail('warn.tiff.multiPage');
-
-  const byTag = new Map<number, RawEntry>();
-  for (const entry of ifd0.entries) if (!byTag.has(entry.tag)) byTag.set(entry.tag, entry);
-
-  if (byTag.has(SUB_IFDS)) return fail('warn.tiff.subIfds');
-  if (byTag.has(DNG_VERSION)) return fail('warn.tiff.raw', { format: 'DNG' });
-
-  const compressionEntry = byTag.get(COMPRESSION);
-  const compression = firstNumber(compressionEntry, await maybeRead(src, compressionEntry), little);
-  if (compression === 6 || compression === 7) return fail('warn.tiff.jpegInner');
-
-  const photometricEntry = byTag.get(PHOTOMETRIC);
-  const photometric = firstNumber(photometricEntry, await maybeRead(src, photometricEntry), little);
-  if (photometric === 32803) return fail('warn.tiff.raw', { format: 'CFA' });
-
-  // Both tables at once is ambiguous: we could only relocate one of them.
-  if (byTag.has(TILE_OFFSETS) && byTag.has(STRIP_OFFSETS)) return fail('warn.tiff.stripTable');
-  const tiled = byTag.has(TILE_OFFSETS) || byTag.has(TILE_COUNTS);
-  const offsetsEntry = byTag.get(tiled ? TILE_OFFSETS : STRIP_OFFSETS);
-  const countsEntry = byTag.get(tiled ? TILE_COUNTS : STRIP_COUNTS);
-  if (!offsetsEntry || !countsEntry) return fail('warn.tiff.noData');
-
-  const offsetsBytes = await readValue(src, offsetsEntry, 32 << 20);
-  const countsBytes = await readValue(src, countsEntry, 32 << 20);
-  if (!offsetsBytes || !countsBytes) return fail('warn.tiff.truncated');
-
-  const offsets = numbersOf(offsetsEntry, offsetsBytes, little);
-  const counts = numbersOf(countsEntry, countsBytes, little);
-  if (offsets.length === 0 || offsets.length !== counts.length) return fail('warn.tiff.stripTable');
-
-  let dataBytes = 0;
-  for (let i = 0; i < offsets.length; i += 1) {
-    const start = offsets[i] ?? 0;
-    const count = counts[i] ?? 0;
-    if (count === 0xffffffff || start + count > src.size) return fail('warn.tiff.stripTable');
-    dataBytes += count;
+  /* ---- walk the directory chain ---------------------------------- */
+  const dirs: RawIfd[] = [];
+  const seen = new Set<number>();
+  let next = little ? u32le(head, 4) : u32be(head, 4);
+  while (next !== 0) {
+    if (seen.has(next)) return fail('warn.tiff.cycle');
+    if (dirs.length >= MAX_PAGES) return fail('warn.tiff.tooManyPages', { count: dirs.length });
+    seen.add(next);
+    const dir = await readIfd(src, next, little);
+    if (!dir) {
+      return dirs.length === 0
+        ? fail('warn.tiff.noIfd')
+        : fail('warn.tiff.chainBroken', { offset: next });
+    }
+    dirs.push(dir);
+    next = dir.next;
   }
+  if (dirs.length === 0) return fail('warn.tiff.noIfd');
 
-  /* Drop everything that is not structural; order stays ascending by tag. */
-  const kept: RawEntry[] = [];
-  const dropped: RawEntry[] = [];
-  for (const entry of [...ifd0.entries].sort((a, b) => a.tag - b.tag)) {
-    if (byTag.get(entry.tag) !== entry) continue; // duplicate tag: first one wins
-    const keep = KEEP_TAGS.has(entry.tag) && !(entry.tag === ICC_TAG && !opts.keepIcc);
-    if (!keep) {
-      dropped.push(entry);
+  /* ---- classify every directory ---------------------------------- */
+  const pages: Prepared[] = [];
+  const thumbnails: Thumbnail[] = [];
+  let innerCleaned = 0;
+
+  for (const [index, dir] of dirs.entries()) {
+    const byTag = new Map<number, RawEntry>();
+    for (const entry of dir.entries) if (!byTag.has(entry.tag)) byTag.set(entry.tag, entry);
+
+    if (byTag.has(SUB_IFDS)) return fail('warn.tiff.subIfds');
+    if (byTag.has(DNG_VERSION)) return fail('warn.tiff.raw', { format: 'DNG' });
+
+    const compression = firstNumber(byTag.get(COMPRESSION), await maybeRead(src, byTag.get(COMPRESSION)), little);
+    // Old-style JPEG keeps the stream behind tag 0x0201 as a whole; that is a
+    // different document layout, so it is refused rather than guessed at.
+    if (compression === 6) return fail('warn.tiff.jpegOldStyle');
+
+    const photometric = firstNumber(byTag.get(PHOTOMETRIC), await maybeRead(src, byTag.get(PHOTOMETRIC)), little);
+    if (photometric === 32803) return fail('warn.tiff.raw', { format: 'CFA' });
+
+    // A reduced-resolution directory is a thumbnail, not a page: it is a copy
+    // of a picture we are about to clean, and it stays behind otherwise.
+    const subfile = firstNumber(byTag.get(SUBFILE_TYPE), await maybeRead(src, byTag.get(SUBFILE_TYPE)), little);
+    const reduced = subfile !== undefined && (subfile & 1) === 1;
+    const preview = byTag.get(JPEG_PREVIEW);
+    if (index > 0 && (reduced || preview !== undefined)) {
+      const count = firstNumber(byTag.get(JPEG_PREVIEW_LENGTH), await maybeRead(src, byTag.get(JPEG_PREVIEW_LENGTH)), little);
+      thumbnails.push({
+        dir,
+        index,
+        bytes: dir.bytes,
+        preview:
+          preview && count && preview.valueOffset + count <= src.size
+            ? { start: preview.valueOffset, count }
+            : undefined,
+      });
       continue;
     }
-    if ((TIFF_TYPE_SIZE[entry.type] ?? 0) === 0) return fail('warn.tiff.badType', { tag: entry.tag.toString(16) });
-    if (entry.size > 4 && entry.valueOffset + entry.size > src.size) {
-      return fail('warn.tiff.valueRange', { tag: entry.tag.toString(16) });
+
+    // Both tables at once is ambiguous: we could only relocate one of them.
+    if (byTag.has(TILE_OFFSETS) && byTag.has(STRIP_OFFSETS)) return fail('warn.tiff.stripTable');
+    const tiled = byTag.has(TILE_OFFSETS) || byTag.has(TILE_COUNTS);
+    const offsetsTag = tiled ? TILE_OFFSETS : STRIP_OFFSETS;
+    const countsTag = tiled ? TILE_COUNTS : STRIP_COUNTS;
+    const offsetsEntry = byTag.get(offsetsTag);
+    const countsEntry = byTag.get(countsTag);
+    if (!offsetsEntry || !countsEntry) return fail('warn.tiff.noData');
+
+    const offsetsBytes = await readValue(src, offsetsEntry, 32 << 20);
+    const countsBytes = await readValue(src, countsEntry, 32 << 20);
+    if (!offsetsBytes || !countsBytes) return fail('warn.tiff.truncated');
+
+    const offsets = numbersOf(offsetsEntry, offsetsBytes, little);
+    const counts = numbersOf(countsEntry, countsBytes, little);
+    if (offsets.length === 0 || offsets.length !== counts.length) return fail('warn.tiff.stripTable');
+
+    const segments: Segment[] = [];
+    for (let i = 0; i < offsets.length; i += 1) {
+      const start = offsets[i] ?? 0;
+      const count = counts[i] ?? 0;
+      if (count === 0xffffffff || start + count > src.size) return fail('warn.tiff.stripTable');
+      segments.push({ start, count, output: { kind: 'slice', start, end: start + count }, at: 0 });
     }
-    kept.push(entry);
-  }
-  if (kept.length === 0) return fail('warn.tiff.noEntries');
 
-  const offsetsTag = tiled ? TILE_OFFSETS : STRIP_OFFSETS;
-  const outSize = (entry: RawEntry): number =>
-    entry.tag === offsetsTag ? counts.length * 4 : entry.size;
-  const inlineOut = (entry: RawEntry): boolean => outSize(entry) <= 4;
+    if (compression === 7) {
+      // New-style JPEG: each strip is its own stream. Clean it with the JPEG
+      // engine so no inner APPn survives, and only keep the bytes when the
+      // stream actually changed.
+      const tables = byTag.get(JPEG_TABLES);
+      if (tables) {
+        const bytes = await readValue(src, tables, 1 << 20);
+        if (bytes && (containsMarker(bytes, 'Exif\u0000\u0000') || containsMarker(bytes, 'x:xmpmeta'))) {
+          return fail('warn.tiff.jpegTables');
+        }
+      }
+      for (const segment of segments) {
+        if (segment.count === 0) continue;
+        if (segment.count > MAX_INNER_JPEG) return fail('warn.tiff.jpegInner', { index: index + 1 });
+        const bytes = await readAt(src, segment.start, segment.count);
+        if (bytes.length !== segment.count) return fail('warn.tiff.truncated');
+        const inner = await analyzeJpeg(sourceFromBytes(bytes), opts);
+        if (!inner.ok) return fail('warn.tiff.jpegInner', { index: index + 1 });
+        if (inner.droppedBytes > 0) {
+          segment.output = { kind: 'bytes', bytes: assembleParts(inner.parts, bytes) };
+          innerCleaned += 1;
+        }
+      }
+    }
 
-  /* Layout: header + IFD0, then out-of-line values, then the image data. */
-  const ifdBytes = 2 + kept.length * 12 + 4;
-  let cursor = 8 + ifdBytes;
-  const valueAt = new Map<number, number>();
-  const pads = new Map<number, number>();
-  for (const entry of kept) {
-    if (inlineOut(entry)) continue;
-    const pad = cursor % 2;
-    cursor += pad;
-    pads.set(entry.tag, pad);
-    valueAt.set(entry.tag, cursor);
-    cursor += outSize(entry);
-  }
-  const dataPad = cursor % 2;
-  const dataStart = cursor + dataPad;
+    const kept: RawEntry[] = [];
+    const dropped: RawEntry[] = [];
+    for (const entry of [...dir.entries].sort((a, b) => a.tag - b.tag)) {
+      if (byTag.get(entry.tag) !== entry) continue; // duplicate tag: first one wins
+      const keep = KEEP_TAGS.has(entry.tag) && !(entry.tag === ICC_TAG && !opts.keepIcc);
+      if (!keep) {
+        dropped.push(entry);
+        continue;
+      }
+      if ((TIFF_TYPE_SIZE[entry.type] ?? 0) === 0) {
+        return fail('warn.tiff.badType', { tag: entry.tag.toString(16) });
+      }
+      if (entry.size > 4 && entry.valueOffset + entry.size > src.size) {
+        return fail('warn.tiff.valueRange', { tag: entry.tag.toString(16) });
+      }
+      kept.push(entry);
+    }
+    if (kept.length === 0) return fail('warn.tiff.noEntries');
 
-  const newOffsets: number[] = [];
-  let position = dataStart;
-  for (const count of counts) {
-    newOffsets.push(position);
-    position += count;
+    pages.push({ dir, index, kept, dropped, offsetsTag, countsTag, segments, dirOffset: 0 });
   }
-  const totalSize = position;
+  if (pages.length === 0) return fail('warn.tiff.noImagePage');
+
+  /* ---- layout: header, then each page's directory, values and data -- */
+  const layouts: PageLayout[] = [];
+  let cursor = 8;
+  for (const page of pages) {
+    const layout: PageLayout = { dirOffset: cursor, valueAt: new Map(), pads: new Map(), dataPad: 0 };
+    layouts.push(layout);
+    page.dirOffset = cursor;
+    cursor += 2 + page.kept.length * 12 + 4;
+    for (const entry of page.kept) {
+      if (inlineOut(page, entry)) continue;
+      const pad = cursor % 2;
+      cursor += pad;
+      layout.pads.set(entry.tag, pad);
+      layout.valueAt.set(entry.tag, cursor);
+      cursor += outLength(page, entry);
+    }
+    layout.dataPad = cursor % 2;
+    cursor += layout.dataPad;
+    for (const segment of page.segments) {
+      segment.at = cursor;
+      cursor += segment.output.kind === 'slice' ? segment.output.end - segment.output.start : segment.output.bytes.length;
+    }
+  }
+  const totalSize = cursor;
   if (totalSize > MAX_TIFF) return fail('warn.tiff.tooLarge');
 
-  /* Rebuild the directory. */
-  const ifd = new Uint8Array(8 + ifdBytes);
-  ifd[0] = little ? 0x49 : 0x4d;
-  ifd[1] = little ? 0x49 : 0x4d;
-  putU16(ifd, 2, 42, little);
-  putU32(ifd, 4, 8, little);
-  putU16(ifd, 8, kept.length, little);
-
-  const offsetTable = new Uint8Array(counts.length * 4);
-  newOffsets.forEach((offset, index) => putU32(offsetTable, index * 4, offset, little));
-
-  kept.forEach((entry, index) => {
-    const at = 8 + 2 + index * 12;
-    const isOffsets = entry.tag === offsetsTag;
-    putU16(ifd, at, entry.tag, little);
-    putU16(ifd, at + 2, isOffsets ? 4 : entry.type, little);
-    putU32(ifd, at + 4, isOffsets ? counts.length : entry.count, little);
-    if (inlineOut(entry)) {
-      if (isOffsets) ifd.set(offsetTable, at + 8);
-      else ifd.set(entry.field.subarray(0, 4), at + 8);
-    } else {
-      putU32(ifd, at + 8, valueAt.get(entry.tag) ?? 0, little);
-    }
-  });
-  putU32(ifd, 8 + 2 + kept.length * 12, 0, little);
-
-  const parts: Part[] = [{ kind: 'bytes', bytes: ifd }];
+  /* ---- emit ------------------------------------------------------ */
+  const parts: Part[] = [];
   const zero = new Uint8Array(1);
-  for (const entry of kept) {
-    if (inlineOut(entry)) continue;
-    for (let i = 0; i < (pads.get(entry.tag) ?? 0); i += 1) parts.push({ kind: 'bytes', bytes: zero });
-    if (entry.tag === offsetsTag) parts.push({ kind: 'bytes', bytes: offsetTable });
-    else parts.push({ kind: 'slice', start: entry.valueOffset, end: entry.valueOffset + entry.size });
-  }
-  if (dataPad > 0) parts.push({ kind: 'bytes', bytes: zero });
-  for (let i = 0; i < offsets.length; i += 1) {
-    const start = offsets[i] ?? 0;
-    const count = counts[i] ?? 0;
-    if (count > 0) parts.push({ kind: 'slice', start, end: start + count });
+  for (const [pageIndex, page] of pages.entries()) {
+    const layout = layouts[pageIndex]!;
+    const dirBytes = 2 + page.kept.length * 12 + 4;
+    const ifd = new Uint8Array(dirBytes);
+    const nextPage = pages[pageIndex + 1];
+    putU16(ifd, 0, page.kept.length, little);
+
+    const offsetTable = new Uint8Array(page.segments.length * 4);
+    page.segments.forEach((segment, at) => putU32(offsetTable, at * 4, segment.at, little));
+    const countTable = new Uint8Array(page.segments.length * 4);
+    page.segments.forEach((segment, at) => {
+      const length = segment.output.kind === 'slice'
+        ? segment.output.end - segment.output.start
+        : segment.output.bytes.length;
+      putU32(countTable, at * 4, length, little);
+    });
+
+    page.kept.forEach((entry, index) => {
+      const at = 2 + index * 12;
+      putU16(ifd, at, entry.tag, little);
+      putU16(ifd, at + 2, isComputed(page, entry) ? 4 : entry.type, little);
+      putU32(ifd, at + 4, isComputed(page, entry) ? page.segments.length : entry.count, little);
+      if (inlineOut(page, entry)) {
+        const body = entry.tag === page.offsetsTag
+          ? offsetTable
+          : entry.tag === page.countsTag
+            ? countTable
+            : entry.field.subarray(0, 4);
+        ifd.set(body.subarray(0, 4), at + 8);
+      } else {
+        putU32(ifd, at + 8, layout.valueAt.get(entry.tag) ?? 0, little);
+      }
+    });
+    putU32(ifd, 2 + page.kept.length * 12, nextPage ? nextPage.dirOffset : 0, little);
+
+    if (pageIndex === 0) {
+      const withHeader = new Uint8Array(8 + dirBytes);
+      withHeader[0] = little ? 0x49 : 0x4d;
+      withHeader[1] = little ? 0x49 : 0x4d;
+      putU16(withHeader, 2, 42, little);
+      putU32(withHeader, 4, 8, little);
+      withHeader.set(ifd, 8);
+      parts.push({ kind: 'bytes', bytes: withHeader });
+    } else {
+      parts.push({ kind: 'bytes', bytes: ifd });
+    }
+
+    for (const entry of page.kept) {
+      if (inlineOut(page, entry)) continue;
+      for (let i = 0; i < (layout.pads.get(entry.tag) ?? 0); i += 1) parts.push({ kind: 'bytes', bytes: zero });
+      if (entry.tag === page.offsetsTag) parts.push({ kind: 'bytes', bytes: offsetTable });
+      else if (entry.tag === page.countsTag) parts.push({ kind: 'bytes', bytes: countTable });
+      else parts.push({ kind: 'slice', start: entry.valueOffset, end: entry.valueOffset + entry.size });
+    }
+
+    for (let i = 0; i < layout.dataPad; i += 1) parts.push({ kind: 'bytes', bytes: zero });
+    for (const segment of page.segments) {
+      if (segment.output.kind === 'bytes') {
+        parts.push({ kind: 'bytes', bytes: segment.output.bytes });
+      } else if (segment.output.end > segment.output.start) {
+        parts.push({ kind: 'slice', start: segment.output.start, end: segment.output.end });
+      }
+    }
   }
 
-  /* ------------------------------------------------------------------ *
-   * Findings
-   * ------------------------------------------------------------------ */
-
+  /* ---- findings --------------------------------------------------- */
   const findings: Finding[] = [];
   const blocks: BlockInfo[] = [
     { name: 'TIFF header', bytes: 8, kept: true },
-    {
-      name: `IFD0 (${ifd0.entries.length} tags)`,
-      bytes: ifd0.bytes,
-      kept: true,
-      note: `${kept.length} kept`,
-    },
   ];
 
-  // Some writers store the same IIM record twice (tag 0x83bb and inside the
-  // Photoshop resource block); report it once.
   const iptcSeen = new Set<string>();
   const addIptc = (summary: IptcSummary | null): void => {
     if (!summary) return;
@@ -483,53 +660,137 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
   };
 
   const descriptive: Field[] = [];
+  const descriptiveSeen = new Set<string>();
   let descriptiveBytes = 0;
+  const exifFields: Field[] = [];
+  const exifSeen = new Set<string>();
+  let exifCount = 0;
+  let exifBytes = 0;
+  let gps: { fields: Field[]; params: Record<string, string | number>; bytes: number } | undefined;
   let unknownTags = 0;
   let unknownBytes = 0;
   let geoCount = 0;
   let geoBytes = 0;
+  let dataBytes = 0;
 
-  for (const entry of dropped) {
-    if (DESCRIPTIVE_TAGS.has(entry.tag) || TIME_EXTRAS.has(entry.tag) || entry.tag === USER_COMMENT) {
-      descriptiveBytes += entry.size;
-      const bytes = await readValue(src, entry, 64 * 1024);
-      if (bytes) {
+  for (const page of pages) {
+    blocks.push({
+      name: `IFD${page.index} (${page.dir.entries.length} tags)`,
+      bytes: page.dir.bytes,
+      kept: true,
+      note: `${page.kept.length} kept`,
+    });
+    for (const segment of page.segments) {
+      dataBytes += segment.output.kind === 'slice'
+        ? segment.output.end - segment.output.start
+        : segment.output.bytes.length;
+    }
+  }
+
+  for (const page of pages) {
+    for (const entry of page.dropped) {
+      if (DESCRIPTIVE_TAGS.has(entry.tag) || TIME_EXTRAS.has(entry.tag) || entry.tag === USER_COMMENT) {
+        descriptiveBytes += entry.size;
+        const bytes = await readValue(src, entry, 64 * 1024);
+        if (!bytes) continue;
         const field = describeEntry(entry, bytes, little, 'tiff');
-        if (field) descriptive.push(field);
+        if (!field) continue;
+        const key = `${field.label}\u0000${field.value}`;
+        if (descriptiveSeen.has(key)) continue;
+        descriptiveSeen.add(key);
+        descriptive.push(field);
+        continue;
       }
-      continue;
+      if (GEO_TAGS.has(entry.tag)) {
+        geoCount += 1;
+        geoBytes += entry.size;
+        continue;
+      }
+      if (entry.tag === XMP_TAG) {
+        blocks.push({ name: 'XMP', bytes: entry.size, kept: false });
+        const bytes = await readValue(src, entry);
+        if (bytes) findings.push(...buildXmpFindings(parseXmp(bytes)));
+        continue;
+      }
+      if (entry.tag === IPTC_TAG) {
+        blocks.push({ name: 'IPTC', bytes: entry.size, kept: false });
+        const bytes = await readValue(src, entry);
+        if (bytes) addIptc(summarizeIim(bytes));
+        continue;
+      }
+      if (entry.tag === PHOTOSHOP_TAG) {
+        blocks.push({ name: 'Photoshop IRB', bytes: entry.size, kept: false });
+        const bytes = await readValue(src, entry);
+        addIptc(bytes ? parsePhotoshopResources(bytes) : null);
+        continue;
+      }
+      if (entry.tag === MAKER_NOTE) {
+        descriptiveBytes += entry.size;
+        descriptive.push({
+          label: tagName('exif', MAKER_NOTE),
+          value: `(${entry.size} bytes, vendor private)`,
+          group: 'device',
+          sensitive: true,
+        });
+        continue;
+      }
+      if (entry.tag === EXIF_POINTER || entry.tag === GPS_POINTER || entry.tag === INTEROP_POINTER) continue;
+      if (entry.tag === JPEG_PREVIEW || entry.tag === JPEG_PREVIEW_LENGTH || entry.tag === JPEG_TABLES) continue;
+      unknownTags += 1;
+      unknownBytes += entry.size;
     }
-    if (GEO_TAGS.has(entry.tag)) {
-      geoCount += 1;
-      geoBytes += entry.size;
-      continue;
+
+    const byTag = new Map<number, RawEntry>();
+    for (const entry of page.dir.entries) if (!byTag.has(entry.tag)) byTag.set(entry.tag, entry);
+
+    const exifPointer = byTag.get(EXIF_POINTER);
+    const exifOffset = firstNumber(exifPointer, await maybeRead(src, exifPointer), little);
+    if (exifOffset) {
+      const exifIfd = await readIfd(src, exifOffset, little);
+      if (exifIfd) {
+        const loaded = await ifdFields(src, exifIfd, little, 'exif');
+        for (const field of loaded.fields) {
+          const key = `${field.label}\u0000${field.value}`;
+          if (exifSeen.has(key)) continue;
+          exifSeen.add(key);
+          exifFields.push(field);
+        }
+        exifCount += exifIfd.entries.length;
+        exifBytes += loaded.weight;
+        blocks.push({ name: `Exif IFD (IFD${page.index})`, bytes: loaded.weight, kept: false });
+        const makerNote = exifIfd.entries.find((entry) => entry.tag === MAKER_NOTE);
+        if (makerNote) blocks.push({ name: 'MakerNote', bytes: makerNote.size, kept: false });
+      } else {
+        findings.push({ id: 'finding.exif.unparsed', category: 'exif', severity: 'medium', bytes: exifPointer?.size ?? 0 });
+      }
     }
-    if (entry.tag === XMP_TAG) {
-      blocks.push({ name: 'XMP', bytes: entry.size, kept: false });
-      const bytes = await readValue(src, entry);
-      if (bytes) findings.push(...buildXmpFindings(parseXmp(bytes)));
-      continue;
+
+    if (!gps) {
+      const gpsPointer = byTag.get(GPS_POINTER);
+      const gpsOffset = firstNumber(gpsPointer, await maybeRead(src, gpsPointer), little);
+      if (gpsOffset) {
+        const gpsIfd = await readIfd(src, gpsOffset, little);
+        if (gpsIfd) {
+          const tags: TiffTag[] = [];
+          let weight = gpsIfd.bytes;
+          for (const entry of gpsIfd.entries) {
+            weight += entry.size;
+            const bytes = await readValue(src, entry, 64 * 1024);
+            if (bytes) tags.push(toTag(entry, bytes, little));
+          }
+          const ifd: TiffIfd = { kind: 'gps', offset: gpsOffset, tags, next: 0 };
+          const info = describeGps(ifd);
+          gps = {
+            fields: info?.fields ?? [],
+            params: info
+              ? { lat: info.latText, lon: info.lonText, mapUrl: info.mapUrl }
+              : { entries: gpsIfd.entries.length },
+            bytes: weight,
+          };
+          blocks.push({ name: 'GPS IFD', bytes: weight, kept: false });
+        }
+      }
     }
-    if (entry.tag === IPTC_TAG) {
-      blocks.push({ name: 'IPTC', bytes: entry.size, kept: false });
-      const bytes = await readValue(src, entry);
-      if (bytes) addIptc(summarizeIim(bytes));
-      continue;
-    }
-    if (entry.tag === PHOTOSHOP_TAG) {
-      blocks.push({ name: 'Photoshop IRB', bytes: entry.size, kept: false });
-      const bytes = await readValue(src, entry);
-      addIptc(bytes ? parsePhotoshopResources(bytes) : null);
-      continue;
-    }
-    if (entry.tag === MAKER_NOTE) {
-      descriptiveBytes += entry.size;
-      descriptive.push({ label: tagName('exif', MAKER_NOTE), value: `(${entry.size} bytes, vendor private)`, group: 'device', sensitive: true });
-      continue;
-    }
-    if (entry.tag === EXIF_POINTER || entry.tag === GPS_POINTER || entry.tag === INTEROP_POINTER) continue;
-    unknownTags += 1;
-    unknownBytes += entry.size;
   }
 
   if (descriptive.length > 0 || descriptiveBytes > 0) {
@@ -548,60 +809,31 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
     });
   }
 
-  const exifPointer = byTag.get(EXIF_POINTER);
-  const exifOffset = firstNumber(exifPointer, await maybeRead(src, exifPointer), little);
-  if (exifOffset) {
-    const exifIfd = await readIfd(src, exifOffset, little);
-    if (exifIfd) {
-      const { fields, weight } = await ifdFields(src, exifIfd, little, 'exif');
-      const params: Record<string, string | number> = { count: exifIfd.entries.length };
-      const make = fields.find((field) => field.label === 'Make')?.value;
-      const model = fields.find((field) => field.label === 'Model')?.value;
-      if (make) params['make'] = make;
-      if (model) params['model'] = model;
-      findings.push({
-        id: 'finding.exif',
-        category: 'exif',
-        severity: 'medium',
-        bytes: weight,
-        params,
-        fields,
-      });
-      blocks.push({ name: 'Exif IFD', bytes: weight, kept: false });
-      const makerNote = exifIfd.entries.find((entry) => entry.tag === MAKER_NOTE);
-      if (makerNote) blocks.push({ name: 'MakerNote', bytes: makerNote.size, kept: false });
-    } else {
-      findings.push({ id: 'finding.exif.unparsed', category: 'exif', severity: 'medium', bytes: exifPointer?.size ?? 0 });
-      blocks.push({ name: 'Exif IFD', bytes: exifPointer?.size ?? 0, kept: false });
-    }
+  if (exifCount > 0) {
+    const params: Record<string, string | number> = { count: exifCount };
+    const make = exifFields.find((field) => field.label === 'Make')?.value;
+    const model = exifFields.find((field) => field.label === 'Model')?.value;
+    if (make) params['make'] = make;
+    if (model) params['model'] = model;
+    findings.push({
+      id: 'finding.exif',
+      category: 'exif',
+      severity: 'medium',
+      bytes: exifBytes,
+      params,
+      fields: exifFields,
+    });
   }
 
-  const gpsPointer = byTag.get(GPS_POINTER);
-  const gpsOffset = firstNumber(gpsPointer, await maybeRead(src, gpsPointer), little);
-  if (gpsOffset) {
-    const gpsIfd = await readIfd(src, gpsOffset, little);
-    if (gpsIfd) {
-      const tags: TiffTag[] = [];
-      let weight = gpsIfd.bytes;
-      for (const entry of gpsIfd.entries) {
-        weight += entry.size;
-        const bytes = await readValue(src, entry, 64 * 1024);
-        if (bytes) tags.push(toTag(entry, bytes, little));
-      }
-      const ifd: TiffIfd = { kind: 'gps', offset: gpsOffset, tags, next: 0 };
-      const info = describeGps(ifd);
-      findings.push({
-        id: 'finding.gps',
-        category: 'gps',
-        severity: 'high',
-        bytes: weight,
-        params: info
-          ? { lat: info.latText, lon: info.lonText, mapUrl: info.mapUrl }
-          : { entries: gpsIfd.entries.length },
-        fields: info?.fields,
-      });
-      blocks.push({ name: 'GPS IFD', bytes: weight, kept: false });
-    }
+  if (gps) {
+    findings.push({
+      id: 'finding.gps',
+      category: 'gps',
+      severity: 'high',
+      bytes: gps.bytes,
+      params: gps.params,
+      fields: gps.fields,
+    });
   }
 
   if (geoCount > 0) {
@@ -626,11 +858,39 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
     blocks.push({ name: 'Unknown tags', bytes: unknownBytes, kept: false });
   }
 
-  const iccEntry = byTag.get(ICC_TAG);
+  if (innerCleaned > 0) {
+    findings.push({
+      id: 'finding.tiff.jpegInner',
+      category: 'exif',
+      severity: 'medium',
+      params: { count: innerCleaned },
+    });
+  }
+
+  for (const thumbnail of thumbnails) {
+    let preview: { blob: Blob; mime: string } | undefined;
+    if (thumbnail.preview) {
+      const bytes = await readAt(src, thumbnail.preview.start, thumbnail.preview.count);
+      if (bytes.length > 0) preview = { blob: new Blob([bytes.slice()], { type: 'image/jpeg' }), mime: 'image/jpeg' };
+    }
+    findings.push({
+      id: 'finding.exif.thumbnail',
+      category: 'thumbnail',
+      severity: 'high',
+      bytes: thumbnail.bytes + (thumbnail.preview?.count ?? 0),
+      preview,
+    });
+    blocks.push({ name: `IFD${thumbnail.index} thumbnail`, bytes: thumbnail.bytes, kept: false });
+  }
+
+  const iccPage = pages.find((page) => page.kept.some((entry) => entry.tag === ICC_TAG));
+  const iccEntry = iccPage?.kept.find((entry) => entry.tag === ICC_TAG);
   if (iccEntry) blocks.push({ name: 'ICC profile', bytes: iccEntry.size, kept: opts.keepIcc });
-  const unit = tiled ? 'tile' : 'strip';
+
+  const unit = pages.some((page) => page.offsetsTag === TILE_OFFSETS) ? 'tile' : 'strip';
+  const segmentCount = pages.reduce((sum, page) => sum + page.segments.length, 0);
   blocks.push({
-    name: `Image data (${counts.length} ${unit}${counts.length === 1 ? '' : 's'})`,
+    name: `Image data (${segmentCount} ${unit}${segmentCount === 1 ? '' : 's'}${pages.length > 1 ? `, ${pages.length} pages` : ''})`,
     bytes: dataBytes,
     kept: true,
   });

@@ -16,7 +16,7 @@
 
 ## 其它待办（低优先级）
 
-`TIFF` 的多页链、BigTIFF、SubIFD、JPEG 压缩内层（目前一律拒绝而不是半清理）；`BMP` / `JXL` 支持；
+`TIFF` 的 BigTIFF、SubIFD、老式 JPEG（压缩方式 6，目前一律拒绝而不是半清理）；`BMP` / `JXL` 支持；
 `avis` 序列（带 `moov`，同样明确拒绝）；批量队列可取消；详情抽屉加焦点陷阱；大 ZIP 的内存上限与 e2e。
 
 ## 已完成
@@ -26,12 +26,15 @@
 XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **126 个单测（CI）+ 32 个
 真实样本用例（本地）+ 12 个 Chrome e2e**，外加 `pnpm verify` 独立复核 43 个输出文件与离线断言。
 
-**TIFF（原低优先级项，进行中）**：`src/core/tiff-image.ts` 不解析像素，只重建目录——按白名单留下
+**TIFF（原低优先级项，已交付）**：`src/core/tiff-image.ts` 不解析像素，只重建目录——按白名单留下
 结构标签，把条带（或瓦片）原样重排、重写 `StripOffsets` / `TileOffsets`，像素码流逐字节复制，
 因此 LZW / Deflate / PackBits / 无压缩 / CMYK / 调色板 / 16 位都能走同一条路。描述性标签、Exif 与
 GPS 子目录、XMP、IPTC、Photoshop 资源、GeoTIFF 地理参考一并删除，`Orientation` 与 ICC 保留。
-BigTIFF、多页、SubIFD、DNG/CR2/CFA 原始格式与 JPEG 压缩 TIFF 明确拒绝。真实样张
-`exiftool-ExifTool.tif`（LZW + IPTC）与 Pillow 生成的十种变体已交叉验证：解码后像素一致，描述标签清零。
+
+多页文件按目录链逐页重建并重新链接；`NewSubfileType` 标为缩小版的目录当作缩略图整份删除；压缩方式 7
+的内嵌 JPEG 条带会交给 JPEG 引擎再清一遍，只有内容真的变了才换字节。仍拒绝：BigTIFF、SubIFD、
+DNG/CR2/CFA 原始格式、老式 JPEG（压缩方式 6）。校验面覆盖真实样张 `exiftool-ExifTool.tif`（LZW + IPTC）、
+Pillow 十种编码变体与三页文档扫描：每页解码像素一致，描述标签清零。
 
 **HEIC / AVIF（原第 1 项，已交付）**：`src/core/isobmff.ts` 负责盒子读写、`iloc`/`iinf`/`iref`/`ipma`
 的版本与可变宽度解析；`src/core/heif.ts` 按白名单重建容器——把保留项重新打包进新的 `mdat`、

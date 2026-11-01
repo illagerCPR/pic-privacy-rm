@@ -43,88 +43,127 @@ function ascii(text: string): Uint8Array {
   return out;
 }
 
-interface BuildSpec {
-  little?: boolean;
-  /** IFD0 entries; the data offset and byte count entries are added here. */
-  ifd0: Entry[];
+interface PageSpec {
+  /** Page entries; the data offset and byte count entries are added here. */
+  entries: Entry[];
   extras?: { pointerTag: number; entries: Entry[] }[];
   strips: Uint8Array[];
   offsetTag?: number;
   countsTag?: number;
   /** Emit the two data-pointer entries at all. */
   withData?: boolean;
-  /** Force the "next IFD" pointer, making a multi-directory file. */
-  nextIfd?: number;
+  /** Set NewSubfileType, so the page reads as a reduced-resolution copy. */
+  subfileType?: number;
   /** Override the recorded data offsets, to build a broken table. */
   offsetOverride?: number[];
+}
+
+interface BuildSpec extends Omit<PageSpec, 'entries'> {
+  /** The first page; `entries` is the modern name, `ifd0` the original one. */
+  entries?: Entry[];
+  ifd0?: Entry[];
+  little?: boolean;
   magic?: number;
+  /** Force the "next IFD" pointer of the last page. */
+  nextIfd?: number;
+  /** Additional pages, chained after the first one. */
+  pages?: PageSpec[];
 }
 
 function align2(value: number): number {
   return value + (value % 2);
 }
 
+interface PageState {
+  dirOffset: number;
+  entries: Entry[];
+  extras: { pointerTag: number; entries: Entry[]; offset: number }[];
+  stripOffsets: number[];
+  dataEntries: { offsets: Entry; counts: Entry } | null;
+}
+
 function buildTiff(spec: BuildSpec): Uint8Array {
   const little = spec.little ?? true;
-  const extras = spec.extras ?? [];
-  const strips = spec.strips;
+  const pages: PageSpec[] = [
+    {
+      entries: spec.entries ?? spec.ifd0 ?? [],
+      extras: spec.extras,
+      strips: spec.strips,
+      offsetTag: spec.offsetTag,
+      countsTag: spec.countsTag,
+      withData: spec.withData,
+      subfileType: spec.subfileType,
+      offsetOverride: spec.offsetOverride,
+    },
+    ...(spec.pages ?? []),
+  ];
 
-  const dataEntries: Entry[] =
-    spec.withData === false
-      ? []
-      : [
-          { tag: spec.offsetTag ?? 0x0111, type: 4, data: new Uint8Array(strips.length * 4) },
-          {
-            tag: spec.countsTag ?? 0x0117,
-            type: 4,
-            data: numbers(strips.map((strip) => strip.length), 4, little),
-          },
-        ];
-  const pointers: Entry[] = extras.map((extra) => ({
-    tag: extra.pointerTag,
-    type: 4,
-    data: new Uint8Array(4),
-  }));
-
-  const ifd0 = [...spec.ifd0, ...pointers, ...dataEntries].sort((a, b) => a.tag - b.tag);
-  const ifd0Table = 2 + ifd0.length * 12 + 4;
-
-  let cursor = align2(8 + ifd0Table);
+  /* First pass: decide every offset. */
+  let cursor = 8;
   const valueAt = new Map<Entry, number>();
-  const placeValues = (entries: Entry[]): void => {
+  const states: PageState[] = [];
+
+  for (const page of pages) {
+    const dataEntries = page.withData === false
+      ? null
+      : {
+          offsets: { tag: page.offsetTag ?? 0x0111, type: 4, data: new Uint8Array(page.strips.length * 4) },
+          counts: { tag: page.countsTag ?? 0x0117, type: 4, data: new Uint8Array(page.strips.length * 4) },
+        };
+    const pointers: Entry[] = (page.extras ?? []).map((extra) => ({
+      tag: extra.pointerTag,
+      type: 4,
+      data: new Uint8Array(4),
+    }));
+    const subfile: Entry[] = page.subfileType === undefined
+      ? []
+      : [{ tag: 0x00fe, type: 4, data: u32(page.subfileType, little) }];
+    const data: Entry[] = dataEntries ? [dataEntries.offsets, dataEntries.counts] : [];
+
+    const entries = [...page.entries, ...subfile, ...pointers, ...data].sort((a, b) => a.tag - b.tag);
+    const state: PageState = { dirOffset: cursor, entries, extras: [], stripOffsets: [], dataEntries };
+    states.push(state);
+
+    cursor += 2 + entries.length * 12 + 4;
     for (const entry of entries) {
       if (entry.data.length <= 4) continue;
       cursor = align2(cursor);
       valueAt.set(entry, cursor);
       cursor += entry.data.length;
     }
-  };
-
-  placeValues(ifd0);
-
-  const extraOffsets: number[] = [];
-  for (const extra of extras) {
-    const sorted = [...extra.entries].sort((a, b) => a.tag - b.tag);
-    cursor = align2(cursor);
-    extraOffsets.push(cursor);
-    cursor += 2 + sorted.length * 12 + 4;
-    placeValues(sorted);
+    for (const extra of page.extras ?? []) {
+      const sorted = [...extra.entries].sort((a, b) => a.tag - b.tag);
+      cursor = align2(cursor);
+      state.extras.push({ pointerTag: extra.pointerTag, entries: sorted, offset: cursor });
+      cursor += 2 + sorted.length * 12 + 4;
+      for (const entry of sorted) {
+        if (entry.data.length <= 4) continue;
+        cursor = align2(cursor);
+        valueAt.set(entry, cursor);
+        cursor += entry.data.length;
+      }
+    }
+    for (const strip of page.strips) {
+      cursor = align2(cursor);
+      state.stripOffsets.push(cursor);
+      cursor += strip.length;
+    }
   }
 
-  const stripOffsets: number[] = [];
-  for (const strip of strips) {
-    cursor = align2(cursor);
-    stripOffsets.push(cursor);
-    cursor += strip.length;
-  }
-
-  const offsetsEntry = ifd0.find((entry) => entry.tag === (spec.offsetTag ?? 0x0111));
-  if (offsetsEntry) offsetsEntry.data = numbers(spec.offsetOverride ?? stripOffsets, 4, little);
-  extras.forEach((extra, index) => {
-    const pointer = ifd0.find((entry) => entry.tag === extra.pointerTag);
-    if (pointer) pointer.data = u32(extraOffsets[index] ?? 0, little);
+  /* Second pass: resolve the values that depend on the layout. */
+  pages.forEach((page, index) => {
+    const state = states[index]!;
+    if (state.dataEntries) {
+      state.dataEntries.offsets.data = numbers(page.offsetOverride ?? state.stripOffsets, 4, little);
+      state.dataEntries.counts.data = numbers(page.strips.map((strip) => strip.length), 4, little);
+    }
+    for (const extra of state.extras) {
+      const pointer = state.entries.find((entry) => entry.tag === extra.pointerTag);
+      if (pointer) pointer.data = u32(extra.offset, little);
+    }
   });
 
+  /* Third pass: write. */
   const bytes = new Uint8Array(cursor);
   const write = (at: number, data: Uint8Array): void => void bytes.set(data, at);
   const u16At = (at: number, value: number): void => void bytes.set(u16(value, little), at);
@@ -148,16 +187,17 @@ function buildTiff(spec: BuildSpec): Uint8Array {
     u32At(offset + 2 + entries.length * 12, next);
   };
 
-  writeIfd(8, ifd0, spec.nextIfd ?? 0);
-  for (const entry of ifd0) if (entry.data.length > 4) write(valueAt.get(entry) ?? 0, entry.data);
-
-  extras.forEach((extra, index) => {
-    const sorted = [...extra.entries].sort((a, b) => a.tag - b.tag);
-    writeIfd(extraOffsets[index] ?? 0, sorted, 0);
-    for (const entry of sorted) if (entry.data.length > 4) write(valueAt.get(entry) ?? 0, entry.data);
+  states.forEach((state, index) => {
+    const next = index + 1 < states.length ? states[index + 1]!.dirOffset : (spec.nextIfd ?? 0);
+    writeIfd(state.dirOffset, state.entries, next);
+    for (const entry of state.entries) if (entry.data.length > 4) write(valueAt.get(entry) ?? 0, entry.data);
+    for (const extra of state.extras) writeIfd(extra.offset, extra.entries, 0);
+    for (const extra of state.extras) {
+      for (const entry of extra.entries) if (entry.data.length > 4) write(valueAt.get(entry) ?? 0, entry.data);
+    }
+    pages[index]!.strips.forEach((strip, at) => write(state.stripOffsets[at] ?? 0, strip));
   });
 
-  strips.forEach((strip, index) => write(stripOffsets[index] ?? 0, strip));
   return bytes;
 }
 
@@ -199,8 +239,13 @@ function readTiff(bytes: Uint8Array, ifdOffset = 8): ReadBack {
 }
 
 /** Pull the image payload out of a stripped file, using only raw byte maths. */
-function payload(bytes: Uint8Array, offsetTag = 0x0111, countsTag = 0x0117): Uint8Array[] {
-  const ifd = readTiff(bytes);
+function payload(
+  bytes: Uint8Array,
+  offsetTag = 0x0111,
+  countsTag = 0x0117,
+  ifdOffset = 8,
+): Uint8Array[] {
+  const ifd = readTiff(bytes, ifdOffset);
   const reader = (data: Uint8Array, index: number): number => {
     const at = index * 4;
     const b = [data[at]!, data[at + 1]!, data[at + 2]!, data[at + 3]!];
@@ -216,6 +261,28 @@ function payload(bytes: Uint8Array, offsetTag = 0x0111, countsTag = 0x0117): Uin
     out.push(bytes.slice(start, start + reader(counts.data, i)));
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * A hand-built JPEG, for the new-style JPEG (compression 7) path.
+ * ------------------------------------------------------------------ */
+
+function jpegSegment(marker: number, body: readonly number[]): number[] {
+  const length = body.length + 2;
+  return [0xff, marker, (length >> 8) & 0xff, length & 0xff, ...body];
+}
+
+/** Minimal but structurally valid JPEG; `withExif` adds an APP1 Exif segment. */
+function tinyJpeg(withExif: boolean): Uint8Array {
+  const out: number[] = [0xff, 0xd8];
+  if (withExif) {
+    const tiff = [0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+    out.push(...jpegSegment(0xe1, [...'Exif\u0000\u0000'].map((char) => char.charCodeAt(0)).concat(tiff)));
+  }
+  out.push(...jpegSegment(0xc0, [8, 0, 2, 0, 2, 1, 1, 0x11, 0])); // SOF0, 2x2, 1 component
+  out.push(...jpegSegment(0xda, [1, 1, 0x00, 0, 63, 0])); // SOS
+  out.push(0x12, 0x34, 0xff, 0xd9); // scan data + EOI
+  return new Uint8Array(out);
 }
 
 /* ------------------------------------------------------------------ *
@@ -401,6 +468,72 @@ describe('TIFF stripping', () => {
     expect((await scanSource(sourceFromBytes(output))).findings).toEqual([]);
   });
 
+  it('rebuilds and re-links every page of a multi-page file', async () => {
+    const source = buildTiff({
+      ifd0: [...baseEntries(true), ...metaEntries()],
+      strips: [WHITE_STRIP],
+      pages: [{
+        entries: [...baseEntries(true), ...metaEntries()],
+        strips: [GREY_STRIP],
+      }],
+    });
+    const result = await stripSource(sourceFromBytes(source));
+    const output = new Uint8Array(await result.blob.arrayBuffer());
+
+    const chain = readTiff(output);
+    expect(chain.next).not.toBe(0);
+    expect(chain.dirs.has(0x010f)).toBe(false);
+    expect(payload(output)).toEqual([WHITE_STRIP]);
+    expect(payload(output, 0x0111, 0x0117, chain.next)).toEqual([GREY_STRIP]);
+
+    const second = readTiff(output, chain.next);
+    expect(second.next).toBe(0);
+    expect(second.dirs.has(0x013b)).toBe(false);
+    expect((await verifyBlob(result.blob, 'tiff')).ok).toBe(true);
+  });
+
+  it('drops a reduced-resolution directory and reports it as a thumbnail', async () => {
+    const source = buildTiff({
+      ifd0: [...baseEntries(true), ...metaEntries()],
+      strips: [WHITE_STRIP],
+      pages: [{
+        entries: [...baseEntries(true), ...metaEntries()],
+        strips: [GREY_STRIP],
+        subfileType: 1,
+      }],
+    });
+
+    const scan = await scanSource(sourceFromBytes(source));
+    expect(scan.findings.some((finding) => finding.id === 'finding.exif.thumbnail')).toBe(true);
+
+    const result = await stripSource(sourceFromBytes(source));
+    const output = new Uint8Array(await result.blob.arrayBuffer());
+    expect(readTiff(output).next).toBe(0);
+    expect(payload(output)).toEqual([WHITE_STRIP]);
+    expect((await verifyBlob(result.blob, 'tiff')).ok).toBe(true);
+  });
+
+  it('cleans metadata inside new-style JPEG strips', async () => {
+    const clean = tinyJpeg(false);
+    const dirty = tinyJpeg(true);
+    expect(Buffer.from(dirty).includes('Exif\u0000\u0000')).toBe(true);
+
+    const entries = (): Entry[] =>
+      baseEntries(true).map((entry) => (entry.tag === 0x0103 ? { ...entry, data: u16(7, true) } : entry));
+    const source = buildTiff({ ifd0: entries(), strips: [dirty, clean] });
+
+    const scan = await scanSource(sourceFromBytes(source));
+    expect(scan.findings.some((finding) => finding.id === 'finding.tiff.jpegInner')).toBe(true);
+
+    const result = await stripSource(sourceFromBytes(source));
+    const output = new Uint8Array(await result.blob.arrayBuffer());
+    const [first, second] = payload(output);
+    expect(Buffer.from(first!).includes('Exif\u0000\u0000')).toBe(false);
+    expect(first!.length).toBe(dirty.length - 24);
+    expect(second).toEqual(clean);
+    expect((await verifyBlob(result.blob, 'tiff')).ok).toBe(true);
+  });
+
   it('drops the ICC profile only when asked', async () => {
     const source = buildTiff({
       ifd0: [...baseEntries(true), { tag: 0x8773, type: 7, data: new Uint8Array(64).fill(7) }],
@@ -483,13 +616,26 @@ describe('TIFF refusals', () => {
     expect(await refusal(bytes)).toBe('warn.tiff.bigTiff');
   });
 
-  it('refuses multi-directory files instead of half-cleaning them', async () => {
+  it('refuses a directory chain that points past the end of the file', async () => {
     const bytes = buildTiff({
       ifd0: [...baseEntries(true), ...metaEntries()],
       strips: [WHITE_STRIP],
-      nextIfd: 400,
+      nextIfd: 4000,
     });
-    expect(await refusal(bytes)).toBe('warn.tiff.multiPage');
+    expect(await refusal(bytes)).toBe('warn.tiff.chainBroken');
+  });
+
+  it('refuses a directory chain that loops', async () => {
+    const bytes = buildTiff({ ifd0: baseEntries(true), strips: [WHITE_STRIP], nextIfd: 8 });
+    expect(await refusal(bytes)).toBe('warn.tiff.cycle');
+  });
+
+  it('refuses old-style JPEG, whose stream hides in tag 0x0201', async () => {
+    const entries = baseEntries(true).map((entry) =>
+      entry.tag === 0x0103 ? { ...entry, data: u16(6, true) } : entry,
+    );
+    const bytes = buildTiff({ ifd0: entries, strips: [WHITE_STRIP] });
+    expect(await refusal(bytes)).toBe('warn.tiff.jpegOldStyle');
   });
 
   it('refuses SubIFDs', async () => {

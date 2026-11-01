@@ -24,7 +24,7 @@ PicPrivacy shows you what is inside a file and then removes it — losslessly, b
 | **WebP** | `EXIF`, `XMP `, `C2PA`, `JUMBF` chunks (and the corresponding flag bits in `VP8X`) | pixels, alpha, animation, ICC |
 | **GIF** | comment extensions, XMP application extension, trailing bytes | every frame, colour tables, looping |
 | **HEIC / AVIF** | the `Exif` item (including GPS), the XMP `mime` item, `jumb` (C2PA), unknown items | picture items (tiles, `grid`, `av01`, alpha, thumbnail, HDR gain map), codec and colour properties |
-| **TIFF** | descriptive IFD0 tags (Make / Model / Artist / Copyright / Software / DateTime / description / XP*), the Exif and GPS sub-directories, XMP (`0x02bc`), IPTC (`0x83bb`), Photoshop resources (`0x8649`), GeoTIFF georeferencing, unknown tags | pixel data (strips and tiles copied verbatim), size / depth / compression / colour tags, `Orientation`, ICC |
+| **TIFF** | descriptive tags (Make / Model / Artist / Copyright / Software / DateTime / description / XP*), the Exif and GPS sub-directories, XMP (`0x02bc`), IPTC (`0x83bb`), Photoshop resources (`0x8649`), GeoTIFF georeferencing, reduced-resolution directories (thumbnails), APPn inside embedded JPEG strips, unknown tags | every page's pixel data (strips and tiles copied verbatim), size / depth / compression / colour tags, `Orientation`, ICC, `JPEGTables` |
 
 Each file is re-scanned after cleaning and the download is blocked unless the result is provably clean.
 
@@ -75,10 +75,12 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
 
 - **SVG and PDF are not supported yet.** They are reported as unsupported instead of
   being silently "cleaned".
-- **TIFF support stops at single-page, non-raw files.** Multi-page TIFF, BigTIFF, files with SubIFDs,
-  camera raws (DNG / CR2 / CFA) and JPEG-compressed TIFF are refused outright rather than half-cleaned:
-  a TIFF keeps its descriptive tags in the same directory as the pixels, and those layouts need a
-  different rebuild.
+- **TIFF handles multiple pages and embedded JPEG**: every page is rebuilt and re-linked into a new
+  directory chain, a directory flagged as reduced resolution is dropped as a thumbnail, and compression-7
+  strips are cleaned as standalone JPEG streams.
+- **TIFF variants that are still refused**: BigTIFF, files with SubIFDs, camera raws (DNG / CR2 / CFA)
+  and old-style JPEG (compression 6, whose stream hides behind `0x0201`). Those need a different rebuild
+  or are not photographs at all, so they fail loudly instead of being half-cleaned.
 - **Browsers cannot preview HEIC or TIFF** (AVIF is fine and shows up normally). Chrome and friends cannot
   decode either one, so the thumbnail falls back to a file icon. Cleaning, verification and download all
   work normally, pixel for pixel.

@@ -23,7 +23,7 @@ PicPrivacy 把文件里到底有什么摆给你看，然后逐字节地删掉—
 | **WebP** | `EXIF`、`XMP `、`C2PA`、`JUMBF` 块（并清除 `VP8X` 中对应的标志位） | 像素、透明通道、动画、ICC |
 | **GIF** | 注释扩展、XMP 应用扩展、尾部残留 | 每一帧、调色板、循环设置 |
 | **HEIC / AVIF** | `Exif` 项目（含 GPS）、XMP `mime` 项目、`jumb`（C2PA）、未知项目 | 图像项目（瓦片、`grid`、`av01`、alpha、缩略图、HDR gain map）、解码与色彩属性 |
-| **TIFF** | IFD0 里的描述性标签（Make / Model / Artist / Copyright / Software / DateTime / 描述 / XP*）、Exif 与 GPS 子目录、XMP（`0x02bc`）、IPTC（`0x83bb`）、Photoshop 资源（`0x8649`）、GeoTIFF 地理参考、未知标签 | 像素数据（条带与瓦片原样搬运）、尺寸 / 位深 / 压缩 / 色彩相关标签、`Orientation`、ICC |
+| **TIFF** | 描述性标签（Make / Model / Artist / Copyright / Software / DateTime / 描述 / XP*）、Exif 与 GPS 子目录、XMP（`0x02bc`）、IPTC（`0x83bb`）、Photoshop 资源（`0x8649`）、GeoTIFF 地理参考、缩小版目录（缩略图）、内嵌 JPEG 条带里的 APPn、未知标签 | 每一页的像素数据（条带与瓦片原样搬运）、尺寸 / 位深 / 压缩 / 色彩相关标签、`Orientation`、ICC、`JPEGTables` |
 
 每个文件处理完都会重新扫描一遍：只要还有任何残留，就不允许下载。
 
@@ -68,9 +68,11 @@ PicPrivacy 把文件里到底有什么摆给你看，然后逐字节地删掉—
 ## 需要知道的限制
 
 - **暂不支持 SVG、PDF**。这些格式会明确提示"不支持"，而不是假装清理过。
-- **TIFF 只处理单页、非原始格式的文件**。多页 TIFF、BigTIFF、带 SubIFD 的文件、相机原始格式
-  （DNG / CR2 / CFA）以及 JPEG 压缩的 TIFF 会被明确拒绝，而不是半清理——TIFF 的描述信息和像素
-  挤在同一份目录里，这些布局需要另一种重建方式。
+- **TIFF 的多页与内嵌 JPEG 都已支持**：每一页会各自重建并重新串成目录链，标为缩小版（NewSubfileType）
+  的目录当作缩略图整份删除，压缩方式 7 的条带会当成独立 JPEG 再清一遍。
+- **仍然拒绝的 TIFF 变体**：BigTIFF、带 SubIFD 的文件、相机原始格式（DNG / CR2 / CFA）、老式 JPEG
+  （压缩方式 6，码流藏在 `0x0201` 里）。这些要么需要另一种重建方式，要么本身就不是"照片"，
+  所以明确报错而不是半清理。
 - **浏览器无法预览 HEIC 和 TIFF**（AVIF 没有这个问题，Chrome 能正常显示）。Chrome 等浏览器根本解不开
   这两种格式，所以文件行的缩略图会变成图标。清理、复检和下载都正常，像素一位不差。
 - **元数据不是画面内容。** 拍到的人脸、门牌、倒影、水印、地标仍然留在画面里。要匿名化画面本身，请另找工具。
