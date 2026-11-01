@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -301,4 +302,32 @@ test('reports the lost orientation tag after cleaning', async ({ page }) => {
   await page.getByRole('button', { name: '全部清理' }).click();
   await expect(page.locator('.file-row--done')).toHaveCount(1, { timeout: 30_000 });
   await expect(page.getByText('方向标签已删除').first()).toBeVisible();
+});
+
+test('exports a reproducible diagnostic report', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  const drawer = page.locator('.drawer');
+
+  const downloadPromise = page.waitForEvent('download');
+  await drawer.getByRole('button', { name: '导出报告' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe('report-meta.json');
+
+  const path = join(outDir, 'report-meta.json');
+  await download.saveAs(path);
+  const report = JSON.parse(readFileSync(path, 'utf8'));
+
+  expect(report.schema).toBe('picprivacy.report/1');
+  expect(report.file).toMatchObject({ name: 'meta.jpg', format: 'jpeg', supported: true });
+  const expected = createHash('sha256').update(readFileSync(join(fixtures, 'meta.jpg'))).digest('hex');
+  expect(report.file.sha256).toBe(expected);
+  expect(report.scan.findings.length).toBeGreaterThan(0);
+  expect(report.scan.hasC2pa).toBe(true);
+  expect(report.scan.blocks.length).toBeGreaterThan(0);
+  // Nothing was cleaned yet, so there is no verification block to report.
+  expect(report.result).toBeUndefined();
 });

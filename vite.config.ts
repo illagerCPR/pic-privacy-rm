@@ -1,6 +1,12 @@
+import { readFileSync } from 'node:fs';
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import type { Plugin } from 'vite';
+
+// Shown in exported diagnostic reports so a bug report names the exact build.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as {
+  version: string;
+};
 
 /**
  * The whole point of this app is that it never talks to a network.
@@ -36,6 +42,7 @@ function cspPlugin(): Plugin {
 
 export default defineConfig({
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   plugins: [react(), cspPlugin()],
   build: {
     target: 'es2022',

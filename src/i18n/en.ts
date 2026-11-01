@@ -33,6 +33,7 @@ export const en: Dict = {
   'actions.stripAll': 'Clean all',
   'actions.strip': 'Clean',
   'actions.download': 'Download',
+  'actions.report': 'Export report',
   'actions.downloadAll': 'Download all (.zip)',
   'actions.details': 'Details',
   'actions.clear': 'Clear',
@@ -202,6 +203,7 @@ export const en: Dict = {
   'toast.zip': 'Building archive…',
   'toast.zipDone': 'Archive download started',
   'toast.copied': 'Copied',
+  'toast.report': 'Report exported — it contains file metadata, do not share it publicly',
   'toast.orientationLost':
     '{n} files lost their orientation tag — re-clean with “Bake orientation” if they look sideways',
   'toast.orientationLost.one':

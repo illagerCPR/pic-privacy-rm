@@ -226,6 +226,7 @@ interface Props {
   onDownload: () => void;
   onLoadMetadata: (id: string) => Promise<MetadataReport | null>;
   onLoadResultMetadata: (id: string) => Promise<MetadataReport | null>;
+  onExportReport: (id: string) => Promise<void>;
 }
 
 type Tab = 'privacy' | 'structure' | 'meta';
@@ -237,6 +238,7 @@ export function DetailsDrawer({
   onDownload,
   onLoadMetadata,
   onLoadResultMetadata,
+  onExportReport,
 }: Props) {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('privacy');
@@ -517,6 +519,14 @@ export function DetailsDrawer({
               {t('actions.download')}
             </button>
           )}
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={() => void onExportReport(item.id)}
+          >
+            <DownloadIcon size={16} />
+            {t('actions.report')}
+          </button>
           <button type="button" className="btn btn--ghost" onClick={onClose}>
             {t('actions.close')}
           </button>

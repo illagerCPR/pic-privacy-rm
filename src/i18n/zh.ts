@@ -32,6 +32,7 @@ export const zh = {
   'actions.stripAll': '全部清理',
   'actions.strip': '清理',
   'actions.download': '下载',
+  'actions.report': '导出报告',
   'actions.downloadAll': '下载全部 (.zip)',
   'actions.details': '详情',
   'actions.clear': '清空',
@@ -197,6 +198,7 @@ export const zh = {
   'toast.zip': '正在打包…',
   'toast.zipDone': '压缩包已开始下载',
   'toast.copied': '已复制',
+  'toast.report': '报告已导出，其中包含文件元数据，请勿公开分享',
   'toast.orientationLost': '{n} 个文件的方向标签已删除，若显示为横躺可开启「把方向写入像素」重新清理',
   'toast.orientationLost.one': '方向标签已删除，若显示为横躺可开启「把方向写入像素」重新清理',
 

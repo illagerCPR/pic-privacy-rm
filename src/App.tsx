@@ -217,6 +217,7 @@ export default function App() {
         }}
         onLoadMetadata={workspace.inspectItem}
         onLoadResultMetadata={workspace.inspectResult}
+        onExportReport={workspace.exportReport}
       />
 
       <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />

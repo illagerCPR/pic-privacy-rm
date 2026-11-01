@@ -5,6 +5,7 @@ import type { RemovalEntry, ScanResult, StripOptions, VerifyResult } from '../co
 import { DEFAULT_STRIP_OPTIONS } from '../core/types.ts';
 import { bakeOrientation } from '../lib/bake.ts';
 import { archiveName, buildZip, downloadBlob } from '../lib/download.ts';
+import { buildReport, reportFileName } from '../lib/report.ts';
 import { looksLikeImage, outputName, sortFilesByName, uniqueName } from '../lib/files.ts';
 import { createLimiter } from '../lib/queue.ts';
 
@@ -92,6 +93,8 @@ export interface Workspace {
   stripAll: () => Promise<void>;
   downloadItem: (id: string) => Promise<void>;
   downloadAll: () => Promise<void>;
+  /** Write a reproducible JSON report of what the engine saw and did. */
+  exportReport: (id: string) => Promise<void>;
   /** Full metadata listing, parsed lazily and cached per item. */
   inspectItem: (id: string) => Promise<MetadataReport | null>;
   /** The same listing for the stripped output, used by the before/after view. */
@@ -345,6 +348,32 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     };
   }, []);
 
+  const exportReport = useCallback(
+    async (id: string) => {
+      const item = itemsRef.current.find((entry) => entry.id === id);
+      if (!item?.scan) return;
+      const json = await buildReport({
+        file: item.file,
+        scan: item.scan,
+        options: settingsRef.current.options,
+        bake: settingsRef.current.bake,
+        result: item.result
+          ? {
+              size: item.result.size,
+              filename: item.result.filename,
+              removed: item.result.removed,
+              removedBytes: item.result.removedBytes,
+              reencoded: item.result.reencoded,
+              verify: item.result.verify,
+            }
+          : undefined,
+      });
+      downloadBlob(new Blob([json], { type: 'application/json' }), reportFileName(item.name));
+      notify('toast.report');
+    },
+    [notify],
+  );
+
   const downloadItem = useCallback(
     async (id: string) => {
       const item = itemsRef.current.find((entry) => entry.id === id);
@@ -397,6 +426,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     stripAll,
     downloadItem,
     downloadAll,
+    exportReport,
     inspectItem,
     inspectResult,
     options: settings.options,
