@@ -165,3 +165,23 @@ test('bakes EXIF orientation into pixels when asked', async ({ page }) => {
   expect(size).toEqual({ width: 60, height: 80 });
   assertClean('baked.jpg', bytes);
 });
+
+test('keeps working offline after the first visit', async ({ page, context }) => {
+  await page.goto('http://127.0.0.1:5190/');
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('隐私');
+  await expect(page.locator('meta[http-equiv="Content-Security-Policy"]')).toHaveCount(1);
+
+  await page.waitForFunction(() => navigator.serviceWorker?.controller != null, undefined, {
+    timeout: 20_000,
+  });
+  await page.reload(); // second load goes through the worker and warms the cache
+
+  await context.setOffline(true);
+  try {
+    await page.reload();
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('隐私');
+    await expect(page.getByRole('button', { name: '选择文件', exact: true })).toBeVisible();
+  } finally {
+    await context.setOffline(false);
+  }
+});

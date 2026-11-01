@@ -16,10 +16,19 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
-    command: 'pnpm dev',
-    url: 'http://127.0.0.1:5188',
-    reuseExistingServer: true,
-    timeout: 60_000,
-  },
+  webServer: [
+    {
+      command: 'pnpm dev',
+      url: 'http://127.0.0.1:5188',
+      reuseExistingServer: true,
+      timeout: 60_000,
+    },
+    {
+      // The offline test needs the production build (service worker + CSP).
+      command: 'pnpm build && pnpm preview --port 5190 --strictPort',
+      url: 'http://127.0.0.1:5190',
+      reuseExistingServer: true,
+      timeout: 120_000,
+    },
+  ],
 });

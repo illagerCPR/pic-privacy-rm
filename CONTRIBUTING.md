@@ -79,7 +79,9 @@ Three independent layers, because a metadata remover that lies is worse than no 
    code — and checks that no EXIF/GPS/XMP/IPTC/C2PA survives, that the pixels are byte-identical to the
    input, and that the files still decode.
 4. **End-to-end tests** (`e2e/`) drive the real UI in Chrome: upload, inspect the drawer, clean, download
-   the ZIP and inspect its bytes; they also assert that the page made zero external requests.
+   the ZIP and inspect its bytes; check orientation baking; assert that the page made zero external
+   requests; and load the production build with the network switched off to prove the service worker
+   keeps the app usable offline.
 
 ## Adding a format
 
