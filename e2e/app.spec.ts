@@ -120,3 +120,48 @@ test('refuses unsupported files without pretending to clean them', async ({ page
   // No download action may be offered.
   await expect(row.getByRole('button', { name: /下载/ })).toHaveCount(0);
 });
+
+function jpegSize(bytes: Uint8Array): { width: number; height: number } {
+  let i = 2;
+  while (i < bytes.length - 9) {
+    if (bytes[i] !== 0xff) {
+      i += 1;
+      continue;
+    }
+    const marker = bytes[i + 1] ?? 0;
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      const height = ((bytes[i + 5] ?? 0) << 8) | (bytes[i + 6] ?? 0);
+      const width = ((bytes[i + 7] ?? 0) << 8) | (bytes[i + 8] ?? 0);
+      return { width, height };
+    }
+    const length = ((bytes[i + 2] ?? 0) << 8) | (bytes[i + 3] ?? 0);
+    i += 2 + length;
+  }
+  throw new Error('no SOF marker');
+}
+
+test('bakes EXIF orientation into pixels when asked', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'progressive.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  // progressive.jpg is 80x60 with orientation 6 (rotate 90° clockwise).
+  // The real checkbox is visually hidden; the label is the click target.
+  await page.locator('.setting', { hasText: '把方向写入像素' }).locator('.setting-label').click();
+  await expect(
+    page.locator('.setting', { hasText: '把方向写入像素' }).locator('input'),
+  ).toBeChecked();
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done')).toHaveCount(1, { timeout: 30_000 });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('.file-row').getByRole('button', { name: '下载' }).click();
+  const download = await downloadPromise;
+  const path = join(outDir, 'baked.jpg');
+  await download.saveAs(path);
+  const bytes = new Uint8Array(readFileSync(path));
+
+  const size = jpegSize(bytes);
+  expect(size).toEqual({ width: 60, height: 80 });
+  assertClean('baked.jpg', bytes);
+});

@@ -1,5 +1,7 @@
 # PicPrivacy
 
+[![CI](https://github.com/illagerCPR/pic-privacy-rm/actions/workflows/ci.yml/badge.svg)](https://github.com/illagerCPR/pic-privacy-rm/actions/workflows/ci.yml)
+
 **Strip the metadata hiding inside your photos — in your browser, without uploading anything.**
 
 [Live demo](https://illagercpr.github.io/pic-privacy-rm/) · [中文说明](README.zh-CN.md)

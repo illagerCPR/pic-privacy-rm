@@ -1,5 +1,7 @@
 # PicPrivacy
 
+[![CI](https://github.com/illagerCPR/pic-privacy-rm/actions/workflows/ci.yml/badge.svg)](https://github.com/illagerCPR/pic-privacy-rm/actions/workflows/ci.yml)
+
 **在浏览器里直接洗掉照片里的隐藏信息，文件不会离开这台设备。**
 
 [在线使用](https://illagercpr.github.io/pic-privacy-rm/) · [English](README.md)
