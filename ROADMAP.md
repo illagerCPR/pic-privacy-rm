@@ -2,7 +2,7 @@
 
 维护者向文档：按「收益 ÷ 代价」排序，不是承诺。动手前请对照 [AGENTS.md](AGENTS.md) 里六条不可破坏的约束。
 
-发布日期：2026-11-01 · 基线提交 `6988920`
+发布日期：2026-11-01 · 基线提交 `9281e1b`
 
 ---
 
@@ -65,17 +65,6 @@
 
 ---
 
-## 5. 站点可访问性（运维）
-
-**现状**：`illagercpr.github.io/pic-privacy-rm/` 会 301 到 `www.illageraris.dpdns.org/pic-privacy-rm/`，
-该域在 Cloudflare 后启用了托管挑战，`curl` 与自动化对所有路径返回 403，只有真实浏览器能通过。
-
-**矛盾**：一个自称零网络的隐私工具，打开先弹人机验证。
-
-**做法**：给该路径放行 Cloudflare 挑战，或干脆取消那条 301。
-
----
-
 ## 明确不做
 
 - **视频元数据**（MP4 `udta` / `meta`）—— 范围与定位都不匹配
@@ -91,4 +80,12 @@
 ## 已完成
 
 四格式无损引擎、双语界面、单张与批量、方向烘焙开关、service worker 离线、CI 与 Pages 自动部署；
-质量面为 35 个单测 + 5 个 Chrome e2e + Pillow 独立校验 + 离线断言。
+「全部元数据」视图（全量 EXIF / XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；
+质量面为 67 个单测 + 8 个 Chrome e2e + Pillow 独立校验 + 离线断言。
+
+**站点可访问性（原第 5 项）**：维护者为 `www.illageraris.dpdns.org/*` 配了 Cloudflare 跳过挑战规则，
+之后 `curl` 与自动化对首页、JS、CSS、`sw.js`、favicon 全部 200（此前一律 403）。仓库侧无需改动。
+
+顺手可做的两件运维小事：在 Pages 设置里打开 Enforce HTTPS —— 现在 301 的 `Location` 是 `http://`，
+等于多一次不安全跳转；关掉 Cloudflare 的 Web Analytics / Rocket Loader —— 注入的 beacon 会被 CSP 拦下，
+开发者工具里会留下 status 0 的请求，容易让「零网络」的验证者误判。

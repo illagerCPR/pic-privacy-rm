@@ -45,9 +45,12 @@ src/core/      pure container logic, no DOM, fully testable in Node
   cbor.ts        minimal CBOR decoder
   c2pa.ts        manifest summary (store → manifest → claim/actions/signature)
   x509.ts        just enough DER for a certificate's CN and validity
+  metadata.ts    every entry expanded for the "all metadata" view
+  inspect.ts     the lazy listing pass, works on any Blob (source or output)
   pipeline.ts    scan / strip / verify orchestration
 src/workers/   the same pipeline, off the main thread
 src/hooks/     React state machine for the file list
+src/lib/       browser helpers: worker client, formatting, hex dump
 src/components/ UI
 ```
 
@@ -79,7 +82,8 @@ Three independent layers, because a metadata remover that lies is worse than no 
    code — and checks that no EXIF/GPS/XMP/IPTC/C2PA survives, that the pixels are byte-identical to the
    input, and that the files still decode.
 4. **End-to-end tests** (`e2e/`) drive the real UI in Chrome: upload, inspect the drawer, clean, download
-   the ZIP and inspect its bytes; check orientation baking; assert that the page made zero external
+   the ZIP and inspect its bytes; check orientation baking; open the all-metadata tab, expand a MakerNote
+   hex dump and compare the listing against the cleaned output; assert that the page made zero external
    requests; and load the production build with the network switched off to prove the service worker
    keeps the app usable offline.
 
@@ -103,6 +107,10 @@ Three independent layers, because a metadata remover that lies is worse than no 
 - GIF XMP is an application extension with the identifier `XMP Data…`; the comment extension is `0xFE`.
 - The entropy-coded data after SOS must be scanned for the next marker; a naive "copy the rest" keeps
   appended metadata.
+- `metadata.ts` and `inspect.ts` are a viewer, never a gate. The strip pass must keep working when parsing
+  fails, so nothing in the listing is allowed to decide what gets removed.
+- The listing's container group is mixed: JFIF, Adobe APP14 and (depending on the setting) ICC survive,
+  unknown APPn do not. Kept/removed is per item; a group may only claim a removal when something really goes.
 
 ## Commits
 

@@ -52,9 +52,17 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
   timestamps, every XMP property, IPTC fields, and the full C2PA manifest — signer, claim generator,
   action history, and the thumbnails those records may embed.
 - **EXIF and XMP thumbnails are displayed**, because they often reveal the uncropped original.
+- **Every metadata entry, listed.** A searchable table of everything a file carries: each IFD tag (IFD0,
+  Exif, GPS, Interop, thumbnail directory), every XMP property, IPTC fields, C2PA claims, and the container
+  blocks themselves. Vendor blobs such as MakerNote are not guessed at — they are shown as raw bytes in a
+  hex viewer.
+- **Before and after, side by side.** Once a file is cleaned, the same table can be run on the output and
+  shown next to the original, so what survived is evidence rather than a promise.
 - Batch clean, per-file states, progress, and a store-only ZIP for download.
 - Optional deep-clean of trailing data after the end marker.
 - English and Chinese UI, light and dark themes, keyboard accessible.
+
+![The all-metadata tab: 81 entries in the original, 4 in the cleaned file](docs/screenshot-metadata.png)
 
 ## Limits worth knowing
 
