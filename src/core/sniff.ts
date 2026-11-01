@@ -10,7 +10,7 @@ const FORMATS: Record<Format, { mime: string; ext: string; supported: boolean }>
   gif: { mime: 'image/gif', ext: 'gif', supported: true },
   avif: { mime: 'image/avif', ext: 'avif', supported: true },
   heic: { mime: 'image/heic', ext: 'heic', supported: true },
-  tiff: { mime: 'image/tiff', ext: 'tif', supported: false },
+  tiff: { mime: 'image/tiff', ext: 'tif', supported: true },
   bmp: { mime: 'image/bmp', ext: 'bmp', supported: false },
   jxl: { mime: 'image/jxl', ext: 'jxl', supported: false },
   svg: { mime: 'image/svg+xml', ext: 'svg', supported: false },
@@ -51,7 +51,11 @@ export async function sniff(src: Source): Promise<FormatInfo> {
     if (['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return formatInfoOf('heic');
     return formatInfoOf('video');
   }
-  if ((b[0] === 0x49 && b[1] === 0x49 && b[2] === 0x2a && b[3] === 0x00) || (b[0] === 0x4d && b[1] === 0x4d && b[2] === 0x00 && b[3] === 0x2a)) {
+  // 42 is classic TIFF, 43 is BigTIFF: the same magic in a different width, so
+  // the analyser gets to explain why the wide one is refused.
+  const tiffMagic = (b[2] === 0x2a || b[2] === 0x2b) && b[3] === 0x00;
+  const tiffMagicBe = b[2] === 0x00 && (b[3] === 0x2a || b[3] === 0x2b);
+  if ((b[0] === 0x49 && b[1] === 0x49 && tiffMagic) || (b[0] === 0x4d && b[1] === 0x4d && tiffMagicBe)) {
     return formatInfoOf('tiff');
   }
   if (b[0] === 0x42 && b[1] === 0x4d) return formatInfoOf('bmp');

@@ -103,50 +103,10 @@ function readPascalName(data: Uint8Array, offset: number): { name: string; next:
   return { name, next: padded };
 }
 
-export function parsePhotoshopApp13(payload: Uint8Array): IptcSummary | null {
-  if (!startsWithBytes(payload, 0, 'Photoshop')) {
-    return null;
-  }
-  let pos = 0;
-  // Skip "Photoshop 3.0\0"
-  const nul = payload.indexOf(0);
-  pos = nul >= 0 ? nul + 1 : 14;
+export type IptcDataset = { key: string; name: string; value: string };
 
-  const resources: IptcResource[] = [];
-  const datasets: { key: string; name: string; value: string }[] = [];
-
-  while (pos + 12 <= payload.length) {
-    const signature = decodeText(payload.subarray(pos, pos + 4));
-    if (signature !== '8BIM' && signature !== 'PHUT' && signature !== 'AgHg' && signature !== 'DCSR') break;
-    const id = u16be(payload, pos + 4);
-    const { name, next } = readPascalName(payload, pos + 6);
-    const sizeOffset = next;
-    if (sizeOffset + 4 > payload.length) break;
-    const size = u32be(payload, sizeOffset);
-    const dataStart = sizeOffset + 4;
-    const dataEnd = Math.min(payload.length, dataStart + size);
-    resources.push({ id, name: name || RESOURCE_NAMES[id] || `0x${id.toString(16)}`, bytes: size });
-
-    if (id === 0x0404) {
-      const iim = payload.subarray(dataStart, dataEnd);
-      let p = 0;
-      while (p + 5 <= iim.length) {
-        if (iim[p] !== 0x1c) break;
-        const record = iim[p + 1] ?? 0;
-        const dataset = iim[p + 2] ?? 0;
-        const len = u16be(iim, p + 3);
-        const body = iim.subarray(p + 5, Math.min(iim.length, p + 5 + len));
-        const key = `${record}:${dataset}`;
-        const text = decodeText(body).replace(/\u0000/g, '').trim();
-        if (text) datasets.push({ key, name: IIM_NAMES[key] ?? key, value: text.slice(0, 400) });
-        p += 5 + len;
-      }
-    }
-
-    pos = dataStart + size + (size % 2);
-  }
-
-  const fields: Field[] = datasets.map((d) => ({
+function fieldsFor(datasets: IptcDataset[]): Field[] {
+  return datasets.map((d) => ({
     label: `IPTC ${d.name}`,
     value: d.value,
     group: /City|Country|Location|Province|Date|Time|Byline|Credit|Copyright|Caption|Headline|Writer|Contact|Source|Keywords|ObjectName/.test(
@@ -156,6 +116,65 @@ export function parsePhotoshopApp13(payload: Uint8Array): IptcSummary | null {
       : 'other',
     sensitive: true,
   }));
+}
 
-  return { bytes: payload.length, resources, datasets, fields };
+/** Read an IPTC-IIM record stream (the payload of TIFF tag 0x83bb, or 8BIM 0x0404). */
+export function parseIptcIim(iim: Uint8Array): IptcDataset[] {
+  const datasets: IptcDataset[] = [];
+  let p = 0;
+  while (p + 5 <= iim.length) {
+    if (iim[p] !== 0x1c) break;
+    const record = iim[p + 1] ?? 0;
+    const dataset = iim[p + 2] ?? 0;
+    const len = u16be(iim, p + 3);
+    const body = iim.subarray(p + 5, Math.min(iim.length, p + 5 + len));
+    const key = `${record}:${dataset}`;
+    const text = decodeText(body).replace(/\u0000/g, '').trim();
+    if (text) datasets.push({ key, name: IIM_NAMES[key] ?? key, value: text.slice(0, 400) });
+    p += 5 + len;
+  }
+  return datasets;
+}
+
+/** Parse a Photoshop image-resource stream (8BIM blocks, without the `Photoshop 3.0` header). */
+export function parsePhotoshopResources(stream: Uint8Array): IptcSummary | null {
+  const resources: IptcResource[] = [];
+  const datasets: IptcDataset[] = [];
+  let pos = 0;
+
+  while (pos + 12 <= stream.length) {
+    const signature = decodeText(stream.subarray(pos, pos + 4));
+    if (signature !== '8BIM' && signature !== 'PHUT' && signature !== 'AgHg' && signature !== 'DCSR') break;
+    const id = u16be(stream, pos + 4);
+    const { name, next } = readPascalName(stream, pos + 6);
+    const sizeOffset = next;
+    if (sizeOffset + 4 > stream.length) break;
+    const size = u32be(stream, sizeOffset);
+    const dataStart = sizeOffset + 4;
+    const dataEnd = Math.min(stream.length, dataStart + size);
+    resources.push({ id, name: name || RESOURCE_NAMES[id] || `0x${id.toString(16)}`, bytes: size });
+
+    if (id === 0x0404) datasets.push(...parseIptcIim(stream.subarray(dataStart, dataEnd)));
+
+    pos = dataStart + size + (size % 2);
+  }
+
+  if (resources.length === 0 && !startsWithBytes(stream, 0, '8BIM')) return null;
+  return { bytes: stream.length, resources, datasets, fields: fieldsFor(datasets) };
+}
+
+export function parsePhotoshopApp13(payload: Uint8Array): IptcSummary | null {
+  if (!startsWithBytes(payload, 0, 'Photoshop')) return null;
+  // Skip "Photoshop 3.0\0"
+  const nul = payload.indexOf(0);
+  const body = payload.subarray(nul >= 0 ? nul + 1 : 14);
+  const summary = parsePhotoshopResources(body);
+  if (!summary) return null;
+  return { ...summary, bytes: payload.length };
+}
+
+/** Summarise a bare IPTC-IIM stream, as stored in TIFF tag 0x83bb. */
+export function summarizeIim(iim: Uint8Array): IptcSummary {
+  const datasets = parseIptcIim(iim);
+  return { bytes: iim.length, resources: [], datasets, fields: fieldsFor(datasets) };
 }

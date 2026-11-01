@@ -43,7 +43,7 @@ export interface TiffResult {
   thumbnail?: TiffThumbnail;
 }
 
-const TYPE_SIZE: Record<number, number> = {
+export const TIFF_TYPE_SIZE: Record<number, number> = {
   1: 1, // BYTE
   2: 1, // ASCII
   3: 2, // SHORT
@@ -75,7 +75,7 @@ function readS32(b: Uint8Array, o: number, little: boolean): number {
   return v > 0x7fffffff ? v - 0x100000000 : v;
 }
 
-function decodeValue(
+export function decodeTiffValue(
   type: number,
   count: number,
   view: Uint8Array,
@@ -173,7 +173,7 @@ export function parseTiff(data: Uint8Array): TiffResult | null {
       const tag = readU16(data, entry, little);
       const type = readU16(data, entry + 2, little);
       const items = readU32(data, entry + 4, little);
-      const size = (TYPE_SIZE[type] ?? 0) * items;
+      const size = (TIFF_TYPE_SIZE[type] ?? 0) * items;
       let view: Uint8Array;
       if (size <= 4) {
         view = data.subarray(entry + 8, entry + 8 + Math.max(0, size));
@@ -183,7 +183,7 @@ export function parseTiff(data: Uint8Array): TiffResult | null {
         view = data.subarray(valueOffset, Math.min(data.length, valueOffset + size));
       }
       if (view.length === 0) continue;
-      tags.push({ tag, type, count: items, value: decodeValue(type, items, view, little) });
+      tags.push({ tag, type, count: items, value: decodeTiffValue(type, items, view, little) });
     }
     const nextOffset = offset + 2 + count * 12 + 4 <= data.length
       ? readU32(data, offset + 2 + count * 12, little)

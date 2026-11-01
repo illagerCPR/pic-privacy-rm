@@ -40,7 +40,8 @@ src/core/      pure container logic, no DOM, fully testable in Node
   gif.ts         block walk
   isobmff.ts     ISO BMFF boxes: iloc / iinf / iref / ipma read and rewrite
   heif.ts        HEIC/AVIF item table, allow-list rebuild, lossless payload repack
-  tiff.ts        TIFF/EXIF IFD reader
+  tiff.ts        TIFF/EXIF IFD reader (shared with the Exif item of every format)
+  tiff-image.ts  TIFF directory rebuild: allow-list entries, relocated strips and tiles
   gps.ts         DMS → decimal, display fields
   xmp.ts         tolerant XMP scanner
   iptc.ts        Photoshop APP13 / IPTC-IIM

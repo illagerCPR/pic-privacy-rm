@@ -95,10 +95,18 @@ export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Prop
 
   const showStrip = item.state === 'ready' || item.state === 'failed';
   const showDownload = item.state === 'done' || item.state === 'clean';
+  // Neither browser can decode these, so the thumbnail degrades to an icon
+  // while the strip pass works exactly as usual.
+  const previewNotice =
+    item.scan?.format === 'heic'
+      ? t('notice.heif.preview')
+      : item.scan?.format === 'tiff'
+        ? t('notice.tiff.preview')
+        : undefined;
 
   return (
     <li className={`file-row file-row--${item.state}`}>
-      <div className="thumb" title={item.scan?.format === 'heic' ? t('notice.heif.preview') : undefined}>
+      <div className="thumb" title={previewNotice}>
         {!thumbBroken ? (
           <img
             src={item.previewUrl}

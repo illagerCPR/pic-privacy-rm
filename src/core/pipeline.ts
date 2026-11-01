@@ -3,6 +3,7 @@ import { analyzeGif } from './gif.ts';
 import { analyzeHeif } from './heif.ts';
 import { analyzeJpeg } from './jpeg.ts';
 import { analyzePng } from './png.ts';
+import { analyzeTiff } from './tiff-image.ts';
 import { analyzeWebp } from './webp.ts';
 import { sniff } from './sniff.ts';
 import { sourceFromBlob, type Source } from './source.ts';
@@ -24,10 +25,10 @@ const ANALYSERS: Record<string, (src: Source, opts: StripOptions) => Promise<Con
   gif: analyzeGif,
   heic: analyzeHeif,
   avif: analyzeHeif,
+  tiff: analyzeTiff,
 };
 
 const UNSUPPORTED_FORMAT_NAMES: Partial<Record<Format, string>> = {
-  tiff: 'TIFF',
   bmp: 'BMP',
   jxl: 'JPEG XL',
   svg: 'SVG',

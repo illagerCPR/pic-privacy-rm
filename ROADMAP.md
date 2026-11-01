@@ -16,15 +16,22 @@
 
 ## 其它待办（低优先级）
 
-`TIFF`（IFD 重写）与 `BMP` / `JXL` 支持；`avis` 序列（带 `moov`，目前明确拒绝而不是半清理）；
-批量队列可取消；详情抽屉加焦点陷阱；大 ZIP 的 e2e。
+`TIFF` 的多页链、BigTIFF、SubIFD、JPEG 压缩内层（目前一律拒绝而不是半清理）；`BMP` / `JXL` 支持；
+`avis` 序列（带 `moov`，同样明确拒绝）；批量队列可取消；详情抽屉加焦点陷阱；大 ZIP 的内存上限与 e2e。
 
 ## 已完成
 
-六种格式的无损引擎（JPEG / PNG / WebP / GIF，以及共用 ISOBMFF 栈的 HEIC / AVIF）、双语界面、
+七种格式的无损引擎（JPEG / PNG / WebP / GIF、共用 ISOBMFF 栈的 HEIC / AVIF，以及 TIFF）、双语界面、
 单张与批量、方向烘焙开关、service worker 离线、CI 与 Pages 自动部署；「全部元数据」视图（全量 EXIF /
-XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **103 个单测（CI）+ 32 个
-真实样本用例（本地）+ 12 个 Chrome e2e**，外加 `pnpm verify` 独立复核 42 个输出文件与离线断言。
+XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **126 个单测（CI）+ 32 个
+真实样本用例（本地）+ 12 个 Chrome e2e**，外加 `pnpm verify` 独立复核 43 个输出文件与离线断言。
+
+**TIFF（原低优先级项，进行中）**：`src/core/tiff-image.ts` 不解析像素，只重建目录——按白名单留下
+结构标签，把条带（或瓦片）原样重排、重写 `StripOffsets` / `TileOffsets`，像素码流逐字节复制，
+因此 LZW / Deflate / PackBits / 无压缩 / CMYK / 调色板 / 16 位都能走同一条路。描述性标签、Exif 与
+GPS 子目录、XMP、IPTC、Photoshop 资源、GeoTIFF 地理参考一并删除，`Orientation` 与 ICC 保留。
+BigTIFF、多页、SubIFD、DNG/CR2/CFA 原始格式与 JPEG 压缩 TIFF 明确拒绝。真实样张
+`exiftool-ExifTool.tif`（LZW + IPTC）与 Pillow 生成的十种变体已交叉验证：解码后像素一致，描述标签清零。
 
 **HEIC / AVIF（原第 1 项，已交付）**：`src/core/isobmff.ts` 负责盒子读写、`iloc`/`iinf`/`iref`/`ipma`
 的版本与可变宽度解析；`src/core/heif.ts` 按白名单重建容器——把保留项重新打包进新的 `mdat`、

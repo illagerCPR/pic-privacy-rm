@@ -24,6 +24,7 @@ PicPrivacy shows you what is inside a file and then removes it — losslessly, b
 | **WebP** | `EXIF`, `XMP `, `C2PA`, `JUMBF` chunks (and the corresponding flag bits in `VP8X`) | pixels, alpha, animation, ICC |
 | **GIF** | comment extensions, XMP application extension, trailing bytes | every frame, colour tables, looping |
 | **HEIC / AVIF** | the `Exif` item (including GPS), the XMP `mime` item, `jumb` (C2PA), unknown items | picture items (tiles, `grid`, `av01`, alpha, thumbnail, HDR gain map), codec and colour properties |
+| **TIFF** | descriptive IFD0 tags (Make / Model / Artist / Copyright / Software / DateTime / description / XP*), the Exif and GPS sub-directories, XMP (`0x02bc`), IPTC (`0x83bb`), Photoshop resources (`0x8649`), GeoTIFF georeferencing, unknown tags | pixel data (strips and tiles copied verbatim), size / depth / compression / colour tags, `Orientation`, ICC |
 
 Each file is re-scanned after cleaning and the download is blocked unless the result is provably clean.
 
@@ -72,11 +73,15 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
 
 ## Limits worth knowing
 
-- **TIFF, SVG and PDF are not supported yet.** They are reported as unsupported instead of
+- **SVG and PDF are not supported yet.** They are reported as unsupported instead of
   being silently "cleaned".
-- **Browsers cannot preview HEIC** (AVIF is fine and shows up normally). Chrome and friends cannot decode
-  HEIC at all, so the thumbnail falls back to a file icon. Cleaning, verification and download all work
-  normally, pixel for pixel.
+- **TIFF support stops at single-page, non-raw files.** Multi-page TIFF, BigTIFF, files with SubIFDs,
+  camera raws (DNG / CR2 / CFA) and JPEG-compressed TIFF are refused outright rather than half-cleaned:
+  a TIFF keeps its descriptive tags in the same directory as the pixels, and those layouts need a
+  different rebuild.
+- **Browsers cannot preview HEIC or TIFF** (AVIF is fine and shows up normally). Chrome and friends cannot
+  decode either one, so the thumbnail falls back to a file icon. Cleaning, verification and download all
+  work normally, pixel for pixel.
 - **Metadata is not content.** Faces, house numbers, reflections, watermarks and landmarks in the picture
   stay in the picture. If you need to anonymise the image itself, use a different tool.
 - **Removing C2PA is deliberate.** Content credentials prove provenance; stripping them means the image

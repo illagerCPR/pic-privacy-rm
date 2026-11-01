@@ -157,6 +157,78 @@ def heif_check(name: str, src: Path, out: Path) -> list[str]:
     return problems
 
 
+# TIFF tags that carry identity, location or edit history. Everything a decoder
+# needs (size, bit depth, compression, colour, orientation, ICC) has to survive,
+# so this file cannot use the "no EXIF at all" rule the other formats use.
+TIFF_PRIVATE_TAGS = {
+    270: "ImageDescription",
+    271: "Make",
+    272: "Model",
+    305: "Software",
+    306: "DateTime",
+    315: "Artist",
+    700: "XMP",
+    8298: "Copyright",
+    33432: "Copyright (old)",
+    33723: "IPTC",
+    34377: "Photoshop resources",
+    34665: "Exif sub-IFD pointer",
+    34853: "GPS sub-IFD pointer",
+    37500: "MakerNote",
+    0x9C9B: "XPTitle",
+    0x9C9C: "XPComment",
+    0x9C9D: "XPAuthor",
+    0x9C9E: "XPKeywords",
+    0x9C9F: "XPSubject",
+    0xC612: "DNGVersion",
+}
+
+
+def tiff_check(name: str, src: Path, out: Path) -> list[str]:
+    """Pillow's `getexif()` on a TIFF returns IFD0 itself, not an EXIF block.
+
+    So the check has to be a tag allow-list instead: the private tags must be
+    gone, and the picture has to decode to the same pixels.
+    """
+    problems: list[str] = []
+    if not out.exists():
+        return [f"{name}: missing stripped output"]
+
+    try:
+        before, before_size = pixels(src)
+        after, after_size = pixels(out)
+    except Exception as exc:  # noqa: BLE001
+        return [f"{name}: output does not decode ({exc!r})"]
+    if before_size != after_size:
+        problems.append(f"{name}: geometry changed {before_size} -> {after_size}")
+    elif before != after:
+        problems.append(f"{name}: pixels changed after stripping")
+
+    try:
+        with Image.open(out) as im:
+            tags = dict(im.tag_v2)
+            sub_ifds = len(im.getexif().get_ifd(0x8769))
+    except Exception as exc:  # noqa: BLE001
+        return [f"{name}: output does not decode ({exc!r})"]
+
+    for tag, label in TIFF_PRIVATE_TAGS.items():
+        if tag in tags:
+            problems.append(f"{name}: {label} (0x{tag:04x}) survived")
+    if sub_ifds:
+        problems.append(f"{name}: Exif sub-IFD still contains {sub_ifds} tags")
+
+    data = out.read_bytes()
+    for marker, label in (
+        (b"Exif\x00\x00", "Exif payload"),
+        (b"x:xmpmeta", "XMP packet"),
+        (b"rdf:RDF", "XMP packet"),
+        (b"Photoshop 3.0\x00", "Photoshop resource block"),
+    ):
+        if marker in data:
+            problems.append(f"{name}: found {label}")
+    return problems
+
+
 def check(name: str, src_dir: Path = FIXTURES, out_dir: Path = OUTPUT) -> list[str]:
     problems: list[str] = []
     src = src_dir / name
@@ -165,6 +237,8 @@ def check(name: str, src_dir: Path = FIXTURES, out_dir: Path = OUTPUT) -> list[s
         return [f"{name}: missing stripped output"]
     if name.lower().endswith((".heic", ".heif", ".avif")):
         return heif_check(name, src, out)
+    if name.lower().endswith((".tif", ".tiff")):
+        return tiff_check(name, src, out)
 
     try:
         with Image.open(out) as im:

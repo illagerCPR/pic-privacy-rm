@@ -24,11 +24,13 @@ import {
 } from './metadata.ts';
 import { readAt, type Source } from './source.ts';
 import { sniff } from './sniff.ts';
+import { tagPolicy } from './tiff-image.ts';
 import { parseTiff } from './tiff.ts';
 import type { FormatInfo } from './types.ts';
 import { parseXmp } from './xmp.ts';
 
 const MAX_INSPECT_ITEM = 8 * 1024 * 1024;
+const MAX_INSPECT_WINDOW = 4 * 1024 * 1024;
 
 export interface InspectOptions {
   /** Mirrors the strip setting so the listing can say what survives. */
@@ -515,6 +517,50 @@ async function inspectHeif(src: Source): Promise<MetadataGroup[]> {
   return finish(groups, [], container);
 }
 
+/**
+ * TIFF keeps its metadata inside the image directory, so the listing is the
+ * directory itself. Only a leading window is parsed: IFD0 and its value blobs
+ * sit right after the header, and a viewer is allowed to degrade — unlike the
+ * strip pass, which never reads this.
+ */
+async function inspectTiffFile(src: Source, opts: InspectOptions): Promise<MetadataGroup[]> {
+  if (src.size < 8) return [];
+  const window = await readAt(src, 0, Math.min(src.size, MAX_INSPECT_WINDOW));
+  const tiff = parseTiff(window);
+  if (!tiff) return [];
+
+  const groups: MetadataGroup[] = inspectTiff(tiff, false).map((group) => {
+    if (group.id !== 'ifd0') return { ...group, removed: true };
+    return {
+      ...group,
+      removed: false,
+      items: group.items.map((item) => ({
+        ...item,
+        removed: item.id ? tagPolicy(Number.parseInt(item.id, 16), opts.keepIcc) !== 'structural' : true,
+      })),
+    };
+  });
+
+  const ifd0 = tiff.ifds.find((ifd) => ifd.kind === 'ifd0');
+  const strips = ifd0?.tags.find((tag) => tag.tag === 0x0111)?.value.nums ?? [];
+  const counts = ifd0?.tags.find((tag) => tag.tag === 0x0117)?.value.nums ?? [];
+  const dataBytes = counts.reduce((sum, value) => sum + value, 0);
+  const container: MetadataItem[] = [
+    {
+      name: 'Byte order',
+      value: tiff.order === 'II' ? 'little endian (Intel)' : 'big endian (Motorola)',
+      removed: false,
+    },
+    {
+      name: `Image data (${strips.length} ${strips.length === 1 ? 'strip' : 'strips'})`,
+      value: `${dataBytes} B`,
+      size: dataBytes,
+      removed: false,
+    },
+  ];
+  return finish(groups, [], container);
+}
+
 /* ------------------------------------------------------------------ *
  * Entry point
  * ------------------------------------------------------------------ */
@@ -538,6 +584,9 @@ export async function inspectSource(src: Source, opts: InspectOptions): Promise<
     case 'heic':
     case 'avif':
       groups = await inspectHeif(src);
+      break;
+    case 'tiff':
+      groups = await inspectTiffFile(src, opts);
       break;
     default:
       groups = [];
