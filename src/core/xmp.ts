@@ -89,8 +89,46 @@ function decodeBase64(value: string): Uint8Array | null {
   }
 }
 
+/**
+ * XMP is XML, and XML may be UTF-16. A handful of real files (ExifTool's
+ * `XMP.jpg` among them) store the packet that way; decoding as UTF-8 yields
+ * NUL-riddled garbage and the listing silently reports "no XMP".
+ */
+function decodeUtf16(bytes: Uint8Array, start: number, bigEndian: boolean): string {
+  let out = '';
+  for (let at = start; at + 1 < bytes.length; at += 2) {
+    const code = bigEndian
+      ? ((bytes[at] ?? 0) << 8) | (bytes[at + 1] ?? 0)
+      : ((bytes[at + 1] ?? 0) << 8) | (bytes[at] ?? 0);
+    out += String.fromCharCode(code);
+  }
+  return out;
+}
+
+function decodeXmp(bytes: Uint8Array): string {
+  if (bytes.length >= 2) {
+    if (bytes[0] === 0xfe && bytes[1] === 0xff) return decodeUtf16(bytes, 2, true);
+    if (bytes[0] === 0xff && bytes[1] === 0xfe) return decodeUtf16(bytes, 2, false);
+  }
+  const probe = bytes.subarray(0, Math.min(bytes.length, 128));
+  let evenZeros = 0;
+  let oddZeros = 0;
+  for (let at = 0; at < probe.length; at += 1) {
+    if (probe[at] !== 0) continue;
+    if (at % 2 === 0) evenZeros += 1;
+    else oddZeros += 1;
+  }
+  // UTF-16 puts a zero in roughly every other byte, so compare proportions
+  // rather than a half-the-buffer threshold: Latin text is often exactly half.
+  // Big-endian puts the zero *first* (`00 41`), little-endian second (`41 00`).
+  const threshold = probe.length * 0.3;
+  if (evenZeros > threshold && evenZeros > oddZeros) return decodeUtf16(bytes, 0, true);
+  if (oddZeros > threshold && oddZeros > evenZeros) return decodeUtf16(bytes, 0, false);
+  return decodeText(bytes);
+}
+
 export function parseXmp(bytes: Uint8Array, extended = false): XmpSummary {
-  const text = decodeText(bytes);
+  const text = decodeXmp(bytes);
   const namespaces: { prefix: string; uri: string }[] = [];
   const seenNs = new Set<string>();
   for (const m of text.matchAll(/xmlns:([A-Za-z0-9_.-]+)\s*=\s*["']([^"']+)["']/g)) {
