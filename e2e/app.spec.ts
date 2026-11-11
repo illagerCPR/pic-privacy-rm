@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -28,8 +29,14 @@ function assertClean(name: string, bytes: Uint8Array) {
   const isPng = magic[0] === 0x89 && magic[1] === 0x50;
   const isWebp = Buffer.from(bytes.subarray(0, 4)).toString('latin1') === 'RIFF';
   const isGif = Buffer.from(bytes.subarray(0, 3)).toString('latin1') === 'GIF';
-  const isTiff = magic[0] === 0x49 && magic[1] === 0x49 && (magic[2] === 0x2a || magic[2] === 0x2b) && magic[3] === 0x00;
-  expect(isJpeg || isPng || isWebp || isGif || isTiff, `${name} has an unknown signature`).toBe(true);
+  const isTiff =
+    magic[0] === 0x49 &&
+    magic[1] === 0x49 &&
+    (magic[2] === 0x2a || magic[2] === 0x2b) &&
+    magic[3] === 0x00;
+  expect(isJpeg || isPng || isWebp || isGif || isTiff, `${name} has an unknown signature`).toBe(
+    true,
+  );
 }
 
 test.beforeAll(() => {
@@ -40,7 +47,11 @@ test('scans, strips and packages images entirely in the browser', async ({ page 
   const externalRequests: string[] = [];
   page.on('request', (request) => {
     const url = request.url();
-    if (!url.startsWith('http://127.0.0.1:5188') && !url.startsWith('data:') && !url.startsWith('blob:')) {
+    if (
+      !url.startsWith('http://127.0.0.1:5188') &&
+      !url.startsWith('data:') &&
+      !url.startsWith('blob:')
+    ) {
       externalRequests.push(url);
     }
   });
@@ -71,7 +82,10 @@ test('scans, strips and packages images entirely in the browser', async ({ page 
   await expect(page.locator('.file-row--clean')).toHaveCount(1);
 
   // Details drawer shows coordinates and the manifest signer.
-  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
   const drawer = page.locator('.drawer');
   await expect(drawer).toBeVisible();
   await expect(drawer).toContainText('35.689333');
@@ -103,7 +117,9 @@ test('scans, strips and packages images entirely in the browser', async ({ page 
     assertClean(member.name, new Uint8Array(readFileSync(join(outDir, 'batch', member.name))));
   }
 
-  expect(externalRequests, `unexpected external requests: ${externalRequests.join(', ')}`).toEqual([]);
+  expect(externalRequests, `unexpected external requests: ${externalRequests.join(', ')}`).toEqual(
+    [],
+  );
   expect(consoleErrors).toEqual([]);
 });
 
@@ -142,14 +158,19 @@ test('cleans a multi-page TIFF and keeps every page', async ({ page }) => {
   const zipPath = join(outDir, 'tiff.zip');
   await download.saveAs(zipPath);
   const members = extractZip(zipPath, join(outDir, 'tiff'));
-  expect(members.map((member) => member.name).sort()).toEqual(['meta-clean.tif', 'multipage-clean.tif']);
+  expect(members.map((member) => member.name).sort()).toEqual([
+    'meta-clean.tif',
+    'multipage-clean.tif',
+  ]);
 
   for (const member of members) {
     const bytes = new Uint8Array(readFileSync(join(outDir, 'tiff', member.name)));
     assertClean(member.name, bytes);
     const text = Buffer.from(bytes).toString('latin1');
     for (const marker of ['Alice Example', 'Terrace at dusk', 'x:xmpmeta', 'Barcelona']) {
-      expect(text.includes(marker), `${member.name} still contains ${JSON.stringify(marker)}`).toBe(false);
+      expect(text.includes(marker), `${member.name} still contains ${JSON.stringify(marker)}`).toBe(
+        false,
+      );
     }
   }
 });
@@ -192,6 +213,169 @@ test('switches language and keeps the layout intact', async ({ page }) => {
   await expect(page.getByRole('heading', { level: 1 })).toContainText('Strip the privacy');
   await page.getByRole('button', { name: '中' }).click();
   await expect(page.getByRole('heading', { level: 1 })).toContainText('移除照片');
+});
+
+test('remembers a manual theme and falls back to the system preference', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/');
+  const root = page.locator('html');
+  await expect(root).toHaveAttribute('data-theme', 'light');
+
+  await page.getByRole('button', { name: '深色' }).click();
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+  const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(background).toBe('rgb(7, 13, 22)');
+
+  // The choice outlives the visit...
+  await page.reload();
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+
+  // ...and "follow the system" gives control back to the OS.
+  await page.getByRole('button', { name: '跟随系统' }).click();
+  await expect(root).toHaveAttribute('data-theme', 'light');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(root).toHaveAttribute('data-theme', 'dark');
+});
+
+test('shows the pixels before and after the strip', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done')).toHaveCount(1, { timeout: 30_000 });
+
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
+  const drawer = page.locator('.drawer');
+  await drawer.getByRole('tab', { name: '全部元数据' }).click();
+  await drawer.getByRole('button', { name: '对比清理前后' }).click();
+
+  const previews = drawer.locator('.meta-preview');
+  await expect(previews).toHaveCount(2);
+  await expect(previews.nth(0)).toContainText('清理前');
+  await expect(previews.nth(1)).toContainText('清理后');
+  // Both images decode: the output is a real JPEG, not an empty panel.
+  for (const image of [previews.nth(0).locator('img'), previews.nth(1).locator('img')]) {
+    await expect(image).toHaveJSProperty('complete', true);
+    expect(await image.evaluate((node) => (node as HTMLImageElement).naturalWidth)).toBeGreaterThan(
+      0,
+    );
+  }
+  await expect(drawer.locator('.meta-preview-note').first()).toContainText('像素数据逐字节保留');
+  // The fixture carries Orientation 6, so the two previews legitimately face
+  // different ways; the note says so instead of letting it look like data loss.
+  await expect(drawer.locator('.meta-preview-note--warn')).toContainText('方向标签');
+});
+
+test('moves between drawer tabs with the keyboard', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
+
+  const drawer = page.locator('.drawer');
+  const privacy = drawer.getByRole('tab', { name: '隐私项' });
+  await expect(privacy).toHaveAttribute('aria-selected', 'true');
+  await privacy.focus();
+
+  await page.keyboard.press('ArrowRight');
+  const structure = drawer.getByRole('tab', { name: '文件结构' });
+  await expect(structure).toHaveAttribute('aria-selected', 'true');
+  await expect(structure).toBeFocused();
+  await expect(drawer.locator('#drawer-panel-structure')).toBeVisible();
+
+  await page.keyboard.press('End');
+  const meta = drawer.getByRole('tab', { name: '全部元数据' });
+  await expect(meta).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('ArrowRight');
+  await expect(privacy).toHaveAttribute('aria-selected', 'true');
+});
+
+test('traps keyboard focus inside the privacy dialog', async ({ page }) => {
+  await page.goto('/');
+  const trigger = page.getByRole('button', { name: '隐私说明' });
+  await trigger.focus();
+  await trigger.click();
+
+  const modal = page.locator('.modal');
+  await expect(modal).toBeVisible();
+  await expect(modal).toBeFocused();
+
+  for (let step = 1; step <= 12; step += 1) {
+    await page.keyboard.press('Tab');
+    const inside = await page.evaluate(() => Boolean(document.activeElement?.closest('.modal')));
+    expect(inside, `focus escaped after ${step} tab(s)`).toBe(true);
+  }
+
+  await page.keyboard.press('Escape');
+  await expect(modal).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
+
+test('has no serious accessibility violations on the landing page', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  const { violations } = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  const serious = violations
+    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
+    .map((violation) => `${violation.id}: ${violation.nodes.length} node(s)`);
+  expect(serious).toEqual([]);
+
+  // The dark palette is a second set of colours, so it gets its own audit. The
+  // palette cross-fades for 160 ms; measuring mid-transition reads as a failure.
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForTimeout(400);
+  const dark = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  expect(
+    dark.violations
+      .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
+      .map((violation) => `${violation.id}: ${violation.nodes.length} node(s)`),
+  ).toEqual([]);
+});
+
+test('has no serious accessibility violations in the details drawer', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done')).toHaveCount(1, { timeout: 30_000 });
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
+  await page.locator('.drawer').getByRole('tab', { name: '全部元数据' }).click();
+  await expect(page.locator('.drawer .meta-row').first()).toBeVisible({ timeout: 15_000 });
+
+  const { violations } = await new AxeBuilder({ page })
+    .include('.drawer')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  const serious = violations
+    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
+    .map((violation) => `${violation.id}: ${violation.nodes.length} node(s)`);
+  expect(serious).toEqual([]);
+
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.waitForTimeout(400);
+  const dark = await new AxeBuilder({ page })
+    .include('.drawer')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  expect(
+    dark.violations
+      .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
+      .map((violation) => `${violation.id}: ${violation.nodes.length} node(s)`),
+  ).toEqual([]);
 });
 
 test('refuses a container it cannot read instead of calling it clean', async ({ page }) => {
@@ -285,12 +469,44 @@ test('keeps working offline after the first visit', async ({ page, context }) =>
   }
 });
 
+test('ships an installable web app manifest with real icons', async ({ page, request }) => {
+  await page.goto('/');
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute('href', './manifest.json');
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+    'href',
+    './icons/apple-touch-icon.png',
+  );
+
+  const response = await request.get('/manifest.json');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['content-type']).toContain('json');
+  const manifest = (await response.json()) as {
+    name: string;
+    start_url: string;
+    display: string;
+    icons: { src: string; sizes: string; type: string; purpose?: string }[];
+  };
+  expect(manifest.start_url).toBe('./');
+  expect(manifest.display).toBe('standalone');
+  expect(manifest.icons.some((icon) => icon.purpose === 'maskable')).toBe(true);
+
+  for (const icon of manifest.icons) {
+    const asset = await request.get(icon.src.replace(/^\.\//, '/'));
+    expect(asset.status(), icon.src).toBe(200);
+    expect(asset.headers()['content-type']).toContain('image/png');
+    expect((await asset.body()).length).toBeGreaterThan(1000);
+  }
+});
+
 test('lists every metadata entry and filters the table', async ({ page }) => {
   await page.goto('/');
   await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
   await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
 
-  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
   const drawer = page.locator('.drawer');
   await drawer.getByRole('tab', { name: '全部元数据' }).click();
 
@@ -319,7 +535,10 @@ test('previews vendor blobs as a hex dump', async ({ page }) => {
   await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
   await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
 
-  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
   const drawer = page.locator('.drawer');
   await drawer.getByRole('tab', { name: '全部元数据' }).click();
   await expect(drawer.locator('.meta-row').first()).toBeVisible({ timeout: 15_000 });
@@ -347,7 +566,10 @@ test('compares the metadata before and after stripping', async ({ page }) => {
   await page.getByRole('button', { name: '全部清理' }).click();
   await expect(page.locator('.file-row--done')).toHaveCount(1, { timeout: 30_000 });
 
-  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
   const drawer = page.locator('.drawer');
   await drawer.getByRole('tab', { name: '全部元数据' }).click();
   await expect(drawer.locator('.meta-row').first()).toBeVisible({ timeout: 15_000 });
@@ -407,7 +629,10 @@ test('exports a reproducible diagnostic report', async ({ page }) => {
   await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
   await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
 
-  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
   const drawer = page.locator('.drawer');
 
   const downloadPromise = page.waitForEvent('download');
@@ -421,7 +646,9 @@ test('exports a reproducible diagnostic report', async ({ page }) => {
 
   expect(report.schema).toBe('picprivacy.report/1');
   expect(report.file).toMatchObject({ name: 'meta.jpg', format: 'jpeg', supported: true });
-  const expected = createHash('sha256').update(readFileSync(join(fixtures, 'meta.jpg'))).digest('hex');
+  const expected = createHash('sha256')
+    .update(readFileSync(join(fixtures, 'meta.jpg')))
+    .digest('hex');
   expect(report.file.sha256).toBe(expected);
   expect(report.scan.findings.length).toBeGreaterThan(0);
   expect(report.scan.hasC2pa).toBe(true);
@@ -445,7 +672,10 @@ test('reports the exact values only when redaction is turned off', async ({ page
   await toggle.locator('.setting-label').click();
   await expect(toggle.locator('input')).not.toBeChecked();
 
-  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  await page
+    .locator('.file-row', { hasText: 'meta.jpg' })
+    .locator('button[aria-label^="查看详情"]')
+    .click();
   const downloadPromise = page.waitForEvent('download');
   await page.locator('.drawer').getByRole('button', { name: '导出报告' }).click();
   const download = await downloadPromise;
@@ -458,7 +688,9 @@ test('reports the exact values only when redaction is turned off', async ({ page
   expect(gps.params.lat).toMatch(/^35\.689/);
 });
 
-test('packages a long batch and every member matches the single-file download', async ({ page }) => {
+test('packages a long batch and every member matches the single-file download', async ({
+  page,
+}) => {
   const consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
@@ -498,6 +730,46 @@ test('packages a long batch and every member matches the single-file download', 
     assertClean(member.name, new Uint8Array(readFileSync(join(outDir, 'large', member.name))));
   }
   expect(consoleErrors).toEqual([]);
+});
+
+test('exports a spreadsheet summary of the batch', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [
+    join(fixtures, 'meta.jpg'),
+    join(fixtures, 'plain.jpg'),
+  ]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: '全部清理' }).click();
+  await expect(page.locator('.file-row--done, .file-row--clean')).toHaveCount(2, {
+    timeout: 30_000,
+  });
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出 CSV 汇总' }).click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toMatch(/^picprivacy-summary-\d{8}-\d{4}\.csv$/);
+
+  const path = join(outDir, 'summary.csv');
+  await download.saveAs(path);
+  const text = readFileSync(path, 'utf8');
+  // Excel needs the BOM to read the Chinese column names.
+  expect(text.startsWith('\uFEFF')).toBe(true);
+  const lines = text
+    .replace(/^\uFEFF/, '')
+    .trimEnd()
+    .split('\r\n');
+  expect(lines[0]).toContain('文件,格式,原始大小（字节）');
+  const meta = lines.find((line) => line.startsWith('meta.jpg,')) ?? '';
+  expect(meta).toContain('JPEG');
+  expect(meta).toContain('已清理');
+  expect(meta).toContain('通过');
+  const clean = lines.find((line) => line.startsWith('plain.jpg,')) ?? '';
+  expect(clean).toContain('无需清理');
+  // Eleven columns in every row, no matter which cells are empty.
+  for (const line of lines.slice(1)) {
+    expect(line.split(',').length).toBeGreaterThanOrEqual(11);
+  }
 });
 
 test('traps keyboard focus inside the drawer and gives it back', async ({ page }) => {
@@ -541,7 +813,9 @@ test('exports one report per file in a single document', async ({ page }) => {
   await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
 
   await page.getByRole('button', { name: '全部清理' }).click();
-  await expect(page.locator('.file-row--done, .file-row--clean')).toHaveCount(2, { timeout: 30_000 });
+  await expect(page.locator('.file-row--done, .file-row--clean')).toHaveCount(2, {
+    timeout: 30_000,
+  });
 
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出批量报告' }).click();
@@ -560,6 +834,8 @@ test('exports one report per file in a single document', async ({ page }) => {
   expect(doc.files[0].result.verify.ok).toBe(true);
   expect(doc.files[1].result).toBeUndefined();
   expect(doc.files[1].file.sha256).toBe(
-    createHash('sha256').update(readFileSync(join(fixtures, 'plain.jpg'))).digest('hex'),
+    createHash('sha256')
+      .update(readFileSync(join(fixtures, 'plain.jpg')))
+      .digest('hex'),
   );
 });

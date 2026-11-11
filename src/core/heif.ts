@@ -36,10 +36,25 @@ import {
 } from './isobmff.ts';
 import { readAt, type Source } from './source.ts';
 import { parseTiff } from './tiff.ts';
-import type { BlockInfo, ContainerAnalysis, Finding, Format, Part, StripOptions, Warning } from './types.ts';
+import type {
+  BlockInfo,
+  ContainerAnalysis,
+  Finding,
+  Format,
+  Part,
+  StripOptions,
+  Warning,
+} from './types.ts';
 import { parseXmp } from './xmp.ts';
 
-/** Item types that carry picture data. Everything else is metadata. */
+/**
+ * Item types that carry picture data. Everything else is metadata.
+ *
+ * `tmap` — an HDR gain map — is deliberately absent. It is picture data, but it
+ * is not needed to decode the main image, and keeping it would need a real
+ * sample with a gain map to verify against (the corpus has none). It is
+ * reported as an unknown item and dropped, and the README says so.
+ */
 const IMAGE_ITEM_TYPES = new Set([
   'hvc1',
   'hvc2',
@@ -222,7 +237,11 @@ export interface HeifStructure {
   ilocVersion: number;
   items: HeifItem[];
   refs: ItemReference[];
-  associations: { version: number; flags: number; items: { id: number; associations: PropertyAssociation[] }[] };
+  associations: {
+    version: number;
+    flags: number;
+    items: { id: number; associations: PropertyAssociation[] }[];
+  };
   primary: number | undefined;
 }
 
@@ -243,7 +262,12 @@ const AVIF_FORMAT: HeifFormat = { format: 'avif', mime: 'image/avif', ext: 'avif
 export function heifFormatOf(ftypBytes: Uint8Array): HeifFormat {
   const major = ascii(ftypBytes, 8, 4);
   const compatible = ascii(ftypBytes, 16, Math.max(0, ftypBytes.length - 16));
-  if (major === 'avif' || major === 'avis' || compatible.includes('avif') || compatible.includes('avis')) {
+  if (
+    major === 'avif' ||
+    major === 'avis' ||
+    compatible.includes('avif') ||
+    compatible.includes('avis')
+  ) {
     return AVIF_FORMAT;
   }
   return HEIC_FORMAT;
@@ -329,7 +353,11 @@ export async function analyzeHeif(src: Source, _opts: StripOptions): Promise<Con
 
   const structure = await readHeifStructure(src);
   if (!structure) {
-    return failed([{ id: 'warn.heif.noMeta', severity: 'error' }], src.size, await sniffContainerFormat(src));
+    return failed(
+      [{ id: 'warn.heif.noMeta', severity: 'error' }],
+      src.size,
+      await sniffContainerFormat(src),
+    );
   }
   const { top, metaBytes, parts, associations, primary, items, format } = structure;
 
@@ -370,9 +398,21 @@ export async function analyzeHeif(src: Source, _opts: StripOptions): Promise<Con
       imageItems += 1;
       if (length === 0) continue;
       if (item.extentCount === 1 && method === 0) {
-        planned.push({ id: info.id, method, length, sourceStart: start, slice: { start, end: start + length } });
+        planned.push({
+          id: info.id,
+          method,
+          length,
+          sourceStart: start,
+          slice: { start, end: start + length },
+        });
       } else {
-        planned.push({ id: info.id, method, length, sourceStart: start, bytes: await readPayload(src, start, length) });
+        planned.push({
+          id: info.id,
+          method,
+          length,
+          sourceStart: start,
+          bytes: await readPayload(src, start, length),
+        });
       }
       continue;
     }
@@ -408,7 +448,12 @@ export async function analyzeHeif(src: Source, _opts: StripOptions): Promise<Con
 
   if (exifSummary) findings.push(...buildExifFindings(exifSummary, exifBytes));
   else if (exifBytes > 0) {
-    findings.push({ id: 'finding.exif.unparsed', category: 'exif', severity: 'high', bytes: exifBytes });
+    findings.push({
+      id: 'finding.exif.unparsed',
+      category: 'exif',
+      severity: 'high',
+      bytes: exifBytes,
+    });
   }
   if (jumbfPayloads.length > 0) findings.push(...buildJumbfFindings(jumbfPayloads, c2paBytes));
   if (unknownTypes.length > 0) {
@@ -455,7 +500,8 @@ export async function analyzeHeif(src: Source, _opts: StripOptions): Promise<Con
       note: `${imageItems} items`,
     });
   }
-  for (const box of top.others) blocks.push({ name: `Top-level ${box.type}`, bytes: box.size, kept: false });
+  for (const box of top.others)
+    blocks.push({ name: `Top-level ${box.type}`, bytes: box.size, kept: false });
 
   const rebuilt = buildContainer({
     metaBytes,
@@ -472,7 +518,8 @@ export async function analyzeHeif(src: Source, _opts: StripOptions): Promise<Con
     ftypBytes,
     primary,
   });
-  if (!rebuilt) return failed([{ id: 'warn.heif.rebuildFailed', severity: 'error' }], src.size, format);
+  if (!rebuilt)
+    return failed([{ id: 'warn.heif.rebuildFailed', severity: 'error' }], src.size, format);
 
   const droppedBytes = src.size - rebuilt.totalBytes;
   const ok = droppedBytes >= 0 && !warnings.some((warn) => warn.severity === 'error');
@@ -541,7 +588,9 @@ function buildContainer(input: RebuildInput): RebuildOutput | null {
   const dinfBytes = parts.dinf ? metaBytes.subarray(parts.dinf.pos, parts.dinf.end) : null;
   const ipcoBytes = parts.iprp
     ? (() => {
-        const ipco = readBoxes(metaBytes, parts.iprp.body, parts.iprp.end).find((box) => box.type === 'ipco');
+        const ipco = readBoxes(metaBytes, parts.iprp.body, parts.iprp.end).find(
+          (box) => box.type === 'ipco',
+        );
         return ipco ? metaBytes.subarray(ipco.pos, ipco.end) : null;
       })()
     : null;
@@ -560,9 +609,10 @@ function buildContainer(input: RebuildInput): RebuildOutput | null {
     }
   }
 
-  const idatPayload = idatItems.length > 0
-    ? concatBytes(idatItems.map((item) => item.bytes ?? new Uint8Array(item.length)))
-    : null;
+  const idatPayload =
+    idatItems.length > 0
+      ? concatBytes(idatItems.map((item) => item.bytes ?? new Uint8Array(item.length)))
+      : null;
   const idatOffsets = new Map<number, number>();
   {
     let cursor = 0;
@@ -595,7 +645,8 @@ function buildContainer(input: RebuildInput): RebuildOutput | null {
         baseOffset: 0,
         extents: [
           {
-            offset: item.method === 1 ? (idatOffsets.get(item.id) ?? 0) : (starts.get(item.id) ?? 0),
+            offset:
+              item.method === 1 ? (idatOffsets.get(item.id) ?? 0) : (starts.get(item.id) ?? 0),
             length: item.length,
           },
         ],
@@ -616,7 +667,9 @@ function buildContainer(input: RebuildInput): RebuildOutput | null {
 
   const mdatHeader = writeMdatHeader(mdatPayload);
 
-  const plan = (offsetSize: number): { meta: Uint8Array; starts: Map<number, number>; payloadStart: number } => {
+  const plan = (
+    offsetSize: number,
+  ): { meta: Uint8Array; starts: Map<number, number>; payloadStart: number } => {
     const probe = writeMeta(offsetSize, new Map());
     const payloadStart = input.ftypBytes.length + probe.length + mdatHeader.length;
     const starts = new Map<number, number>();
@@ -644,7 +697,8 @@ function buildContainer(input: RebuildInput): RebuildOutput | null {
     { kind: 'bytes', bytes: mdatHeader },
   ];
   for (const item of mdatItems) {
-    if (item.slice) containerParts.push({ kind: 'slice', start: item.slice.start, end: item.slice.end });
+    if (item.slice)
+      containerParts.push({ kind: 'slice', start: item.slice.start, end: item.slice.end });
     else if (item.bytes) containerParts.push({ kind: 'bytes', bytes: item.bytes });
   }
   return { containerParts, totalBytes };

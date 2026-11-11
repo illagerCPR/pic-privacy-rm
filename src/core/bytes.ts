@@ -18,14 +18,7 @@ export function u32be(b: Uint8Array, o: number): number {
 }
 
 export function u32le(b: Uint8Array, o: number): number {
-  return (
-    (u8(b, o) | (u8(b, o + 1) << 8) | (u8(b, o + 2) << 16)) + u8(b, o + 3) * 0x1000000
-  );
-}
-
-export function i32be(b: Uint8Array, o: number): number {
-  const v = u32be(b, o);
-  return v > 0x7fffffff ? v - 0x100000000 : v;
+  return (u8(b, o) | (u8(b, o + 1) << 8) | (u8(b, o + 2) << 16)) + u8(b, o + 3) * 0x1000000;
 }
 
 /** 64-bit big-endian read; values above Number.MAX_SAFE_INTEGER are clamped. */
@@ -51,10 +44,6 @@ export function startsWithBytes(b: Uint8Array, o: number, prefix: string): boole
   return true;
 }
 
-export function startsWithAny(b: Uint8Array, o: number, prefixes: readonly string[]): boolean {
-  return prefixes.some((p) => startsWithBytes(b, o, p));
-}
-
 export function indexOfBytes(haystack: Uint8Array, needle: Uint8Array, from = 0): number {
   if (needle.length === 0) return from;
   const last = haystack.length - needle.length;
@@ -77,13 +66,6 @@ export function concatBytes(parts: readonly Uint8Array[]): Uint8Array {
     at += p.length;
   }
   return out;
-}
-
-export function toHex(b: Uint8Array, max = 24): string {
-  const n = Math.min(b.length, max);
-  let s = '';
-  for (let i = 0; i < n; i += 1) s += (b[i] ?? 0).toString(16).padStart(2, '0');
-  return s + (b.length > max ? '…' : '');
 }
 
 /** True when every byte is printable ASCII / common whitespace. */

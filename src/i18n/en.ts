@@ -4,6 +4,10 @@ export const en: Dict = {
   'nav.privacy': 'How it works',
   'nav.github': 'GitHub',
   'nav.lang': 'Language',
+  'theme.label': 'Colour theme',
+  'theme.system': 'Match system',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
 
   'hero.title': 'Strip the privacy hiding inside your photos',
   'hero.subtitle':
@@ -18,15 +22,18 @@ export const en: Dict = {
   'drop.pickFolder': 'Choose folder',
   'drop.paste': 'Paste',
   'drop.addMore': 'Add more images',
-  'drop.formats': 'HEIC, AVIF and TIFF are supported; multi-page TIFF keeps every page. Convert image sequences (avis) first',
+  'drop.formats':
+    'HEIC, AVIF and TIFF are supported; multi-page TIFF keeps every page. Convert image sequences (avis) first',
   'drop.dragging': 'Release to add',
 
   'steps.drop.title': 'Drop your photos',
   'steps.drop.body': 'JPEG, PNG, WebP, GIF, HEIC, AVIF and TIFF — drop a whole folder at once.',
   'steps.inspect.title': 'See exactly what goes',
-  'steps.inspect.body': 'GPS coordinates, camera model, serial numbers and C2PA credentials, item by item.',
+  'steps.inspect.body':
+    'GPS coordinates, camera model, serial numbers and C2PA credentials, item by item.',
   'steps.download.title': 'Download clean copies',
-  'steps.download.body': 'The container is rewritten byte by byte; pixels stay identical and every output is re-checked.',
+  'steps.download.body':
+    'The container is rewritten byte by byte; pixels stay identical and every output is re-checked.',
 
   'stats.files': '{n} files',
   'stats.files.one': '{n} file',
@@ -43,6 +50,7 @@ export const en: Dict = {
   'actions.report': 'Export report',
   'actions.downloadAll': 'Download all (.zip)',
   'actions.exportBatchReport': 'Export batch report',
+  'actions.exportCsv': 'Export CSV summary',
   'actions.details': 'Details',
   'actions.clear': 'Clear',
   'actions.cancel': 'Cancel',
@@ -100,19 +108,23 @@ export const en: Dict = {
     'The browser could not decode this image. The clean result is kept but the pixels were not rotated; the orientation tag was handled as configured.',
 
   'finding.gps': 'GPS location',
-  'finding.gps.desc': 'Latitude and longitude of the spot where the photo was taken, accurate to metres.',
+  'finding.gps.desc':
+    'Latitude and longitude of the spot where the photo was taken, accurate to metres.',
   'finding.exif': 'EXIF shooting data',
   'finding.exif.desc': 'Camera model, serial number, timestamps, firmware and exposure settings.',
   'finding.exif.unparsed': 'Unreadable EXIF block',
   'finding.exif.unparsed.desc': 'EXIF data is present but malformed. It is removed anyway.',
   'finding.exif.thumbnail': 'EXIF thumbnail',
-  'finding.exif.thumbnail.desc': 'A small preview written by the camera — it often shows the uncropped original.',
+  'finding.exif.thumbnail.desc':
+    'A small preview written by the camera — it often shows the uncropped original.',
   'finding.jfxx.thumbnail': 'JFXX thumbnail',
   'finding.jfxx.thumbnail.desc': 'A second thumbnail stored in the JPEG application header.',
   'finding.xmp': 'XMP metadata',
-  'finding.xmp.desc': 'Structured data written by editors: author, location, edit history, document IDs.',
+  'finding.xmp.desc':
+    'Structured data written by editors: author, location, edit history, document IDs.',
   'finding.xmp.extended': 'Extended XMP',
-  'finding.xmp.extended.desc': 'XMP larger than 64 KB is split up and often carries the full edit history.',
+  'finding.xmp.extended.desc':
+    'XMP larger than 64 KB is split up and often carries the full edit history.',
   'finding.xmp.thumbnail': 'XMP thumbnail',
   'finding.xmp.thumbnail.desc': 'A base64 preview embedded in the XMP packet.',
   'finding.iptc': 'IPTC / Photoshop metadata',
@@ -120,23 +132,28 @@ export const en: Dict = {
   'finding.iptc.resources': 'Photoshop resource blocks',
   'finding.iptc.resources.desc': 'Image resources such as thumbnails, URLs and copyright flags.',
   'finding.c2pa': 'C2PA content credentials',
-  'finding.c2pa.desc': 'A cryptographically signed provenance record: who made it, with which tool, and what edits happened.',
+  'finding.c2pa.desc':
+    'A cryptographically signed provenance record: who made it, with which tool, and what edits happened.',
   'finding.c2pa.unparsed': 'C2PA / JUMBF data',
-  'finding.c2pa.unparsed.desc': 'JUMBF data was found but could not be parsed. It is removed anyway.',
+  'finding.c2pa.unparsed.desc':
+    'JUMBF data was found but could not be parsed. It is removed anyway.',
   'finding.jumbf': 'JUMBF data',
   'finding.jumbf.desc': 'May contain content credentials or other embedded data.',
   'finding.comment': 'JPEG comment',
   'finding.comment.gif': 'GIF comment',
   'finding.comment.desc': 'A plain-text note stored in the file.',
   'finding.mpf': 'Multi-picture (MPF)',
-  'finding.mpf.desc': 'A second image appended after the end marker — often a depth or preview frame.',
+  'finding.mpf.desc':
+    'A second image appended after the end marker — often a depth or preview frame.',
   'finding.trailer': 'Trailing data',
-  'finding.trailer.desc': 'Extra bytes after the end marker, common from cameras and editing tools.',
+  'finding.trailer.desc':
+    'Extra bytes after the end marker, common from cameras and editing tools.',
   'finding.png.text': 'PNG text chunks',
   'finding.png.time': 'PNG modification time',
   'finding.png.time.desc': 'A timestamp stored inside the file.',
   'finding.orientation': 'EXIF orientation',
-  'finding.orientation.desc': 'The rotation tag phones rely on; some viewers show the image sideways once it is gone.',
+  'finding.orientation.desc':
+    'The rotation tag phones rely on; some viewers show the image sideways once it is gone.',
   'finding.gif.animation': 'Animated GIF',
   'finding.gif.animation.desc': 'All frames are kept; only comments and XMP are removed.',
   'finding.app.unknown': 'Unknown APP segments',
@@ -214,7 +231,6 @@ export const en: Dict = {
   'error.noFiles': 'Add some images first',
   'error.worker': 'Background worker unavailable, using the main thread',
   'error.zipFailed': 'Could not build the archive',
-  'error.zipTooLarge': 'The archive would exceed 4 GB — download it in smaller batches',
   'error.reportFailed': 'Could not build the report',
 
   'toast.added': 'Added {n} files',
@@ -224,6 +240,22 @@ export const en: Dict = {
   'toast.batchCancelled': 'Batch cancelled: {n} cleaned, {left} left untouched',
   'toast.zipDone': 'Archive download started',
   'toast.reportBatch': 'Batch report download started',
+  'toast.csv': 'CSV summary exported',
+  'csv.file': 'File',
+  'csv.format': 'Format',
+  'csv.size': 'Size (bytes)',
+  'csv.status': 'Status',
+  'csv.findings': 'Findings',
+  'csv.categories': 'Categories',
+  'csv.removed': 'Removable bytes',
+  'csv.output': 'Output size (bytes)',
+  'csv.verify': 'Verification',
+  'csv.reencoded': 'Re-encoded',
+  'csv.pass': 'passed',
+  'csv.fail': 'failed',
+  'csv.yes': 'yes',
+  'csv.no': 'no',
+  'csv.error': 'Error',
   'toast.copied': 'Copied',
   'toast.report': 'Report exported — it contains file metadata, do not share it publicly',
   'toast.orientationLost':
@@ -257,6 +289,11 @@ export const en: Dict = {
   'meta.before': 'Before',
   'meta.after': 'After',
   'meta.afterClean': 'Nothing removable is left in the stripped file',
+  'meta.samePixels': 'Pixel data is byte-identical; only the container was rewritten.',
+  'meta.reencodedPixels':
+    'The orientation bake re-encoded the pixels through Canvas, which is lossy.',
+  'meta.orientationPreview':
+    'The source carried an orientation tag and the browser rotated the "before" image; the tag is gone after stripping, so the "after" image is not rotated. The pixels are unchanged.',
   'meta.hexShow': 'Show bytes',
   'meta.hexHide': 'Hide bytes',
   'meta.hexRange': '{shown} of {total} bytes',
@@ -296,7 +333,8 @@ export const en: Dict = {
   'warn.heif.rebuildFailed': 'Could not rebuild the HEIF container',
   'warn.heif.tableMismatch': 'Item and location tables disagree ({info} / {loc})',
   'warn.heif.exifUnparsed': 'The Exif item is malformed; it is still removed in full',
-  'warn.heif.sequence': 'This is an image sequence (animated AVIF/HEIC), which is not supported yet',
+  'warn.heif.sequence':
+    'This is an image sequence (animated AVIF/HEIC), which is not supported yet',
   'warn.heif.orientationLost': 'Orientation lives only in EXIF ({orientation}) and will be lost',
   'notice.heif.preview': 'Browsers cannot preview HEIC; cleaning and download are unaffected',
   'warn.tiff.notTiff': 'Not a valid TIFF',
@@ -306,7 +344,8 @@ export const en: Dict = {
   'warn.tiff.chainBroken': 'The TIFF directory chain breaks at offset {offset}',
   'warn.tiff.tooManyPages': 'Too many TIFF pages ({count})',
   'warn.tiff.noImagePage': 'No page with image data was found',
-  'warn.tiff.jpegOldStyle': 'Old-style JPEG (compression 6) keeps its stream in tag 0x0201; not supported yet',
+  'warn.tiff.jpegOldStyle':
+    'Old-style JPEG (compression 6) keeps its stream in tag 0x0201; not supported yet',
   'warn.tiff.jpegTables': 'JPEGTables carries metadata; not supported yet',
   'warn.tiff.subIfds': 'The file carries sub-images (SubIFD), which are not supported yet',
   'warn.tiff.raw': 'This is a camera raw file ({format}) and will not be touched',
@@ -321,14 +360,18 @@ export const en: Dict = {
   'notice.tiff.preview': 'Browsers cannot preview TIFF; cleaning and download are unaffected',
 
   'finding.heif.item': 'Other HEIF metadata item',
-  'finding.heif.item.desc': 'An item that is not picture data: text, a URI reference or an unknown resource.',
+  'finding.heif.item.desc':
+    'An item that is not picture data: text, a URI reference or an unknown resource.',
 
   'finding.tiff.tags': 'Descriptive tags in the TIFF directory',
-  'finding.tiff.tags.desc': 'Author, copyright, software and comments, stored in the same directory as the pixels.',
+  'finding.tiff.tags.desc':
+    'Author, copyright, software and comments, stored in the same directory as the pixels.',
   'finding.tiff.geo': 'Georeferencing (GeoTIFF)',
-  'finding.tiff.geo.desc': 'Map parameters that turn image coordinates into latitude and longitude.',
+  'finding.tiff.geo.desc':
+    'Map parameters that turn image coordinates into latitude and longitude.',
   'finding.tiff.unknown': 'Unrecognised TIFF tags',
-  'finding.tiff.unknown.desc': 'Under the allow-list policy, vendor private and unknown tags are always removed.',
+  'finding.tiff.unknown.desc':
+    'Under the allow-list policy, vendor private and unknown tags are always removed.',
   'finding.tiff.jpegInner': 'Metadata inside the embedded JPEG streams',
   'finding.tiff.jpegInner.desc': 'Each strip is its own JPEG; its APPn segments are stripped too.',
 
@@ -338,6 +381,7 @@ export const en: Dict = {
   'a11y.download': 'Download the cleaned file',
   'a11y.remove': 'Remove from list',
   'a11y.progress': 'Processing progress',
+  'a11y.scanDone': 'Scan finished: {n} files',
   'a11y.packing': 'Archive progress',
   'a11y.reporting': 'Report progress',
 };

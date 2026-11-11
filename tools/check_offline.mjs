@@ -30,7 +30,9 @@ function inspect(path) {
       problems.push(`${name}: CSP does not forbid network connections`);
     }
 
-    for (const match of html.matchAll(/<(script|link|img|iframe)[^>]*(?:src|href)="(https?:)?\/\/[^"]*"/gi)) {
+    for (const match of html.matchAll(
+      /<(script|link|img|iframe)[^>]*(?:src|href)="(https?:)?\/\/[^"]*"/gi,
+    )) {
       problems.push(`${name}: external subresource ${match[0].slice(0, 120)}`);
     }
   }

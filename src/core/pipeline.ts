@@ -29,18 +29,6 @@ const ANALYSERS: Record<string, (src: Source, opts: StripOptions) => Promise<Con
   tiff: analyzeTiff,
 };
 
-const UNSUPPORTED_FORMAT_NAMES: Partial<Record<Format, string>> = {
-  bmp: 'BMP',
-  jxl: 'JPEG XL',
-  svg: 'SVG',
-  pdf: 'PDF',
-  video: 'video',
-};
-
-export function unsupportedFormatName(format: Format): string | undefined {
-  return UNSUPPORTED_FORMAT_NAMES[format];
-}
-
 async function analyse(src: Source, opts: StripOptions): Promise<ContainerAnalysis | null> {
   const info = await sniff(src);
   const analyser = ANALYSERS[info.format];
@@ -100,7 +88,9 @@ export async function stripSource(
   }
 
   const blobParts: BlobPart[] = analysis.parts.map((part) =>
-    part.kind === 'slice' ? src.blob.slice(part.start, part.end) : (part.bytes as unknown as BlobPart),
+    part.kind === 'slice'
+      ? src.blob.slice(part.start, part.end)
+      : (part.bytes as unknown as BlobPart),
   );
   const blob = new Blob(blobParts, { type: analysis.mime });
 
@@ -159,7 +149,11 @@ export async function verifyBlob(
   );
   const formatMismatch = expectFormat !== undefined && scan.format !== expectFormat;
   return {
-    ok: scan.supported && !formatMismatch && leftovers.length === 0 && !scan.warnings.some((w) => w.severity === 'error'),
+    ok:
+      scan.supported &&
+      !formatMismatch &&
+      leftovers.length === 0 &&
+      !scan.warnings.some((w) => w.severity === 'error'),
     leftovers,
     warnings: scan.warnings,
     fileSize: blob.size,

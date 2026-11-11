@@ -36,7 +36,8 @@ export async function sniff(src: Source): Promise<FormatInfo> {
   if (ascii(b, 0, 4) === 'RIFF') {
     const riffType = ascii(b, 8, 4);
     if (riffType === 'WEBP') return formatInfoOf('webp');
-    if (riffType === 'WAVE') return { format: 'unknown', mime: 'audio/wav', ext: 'wav', supported: false };
+    if (riffType === 'WAVE')
+      return { format: 'unknown', mime: 'audio/wav', ext: 'wav', supported: false };
     if (riffType === 'AVI ') return formatInfoOf('video');
     return formatInfoOf('unknown');
   }
@@ -45,30 +46,46 @@ export async function sniff(src: Source): Promise<FormatInfo> {
     // `mif1` is the generic HEIF brand and can hold either codec, so the
     // compatibility list decides before the major brand does.
     const compatible = ascii(b, 16, Math.min(48, b.length - 16));
-    if (['avif', 'avis'].includes(brand) || compatible.includes('avif') || compatible.includes('avis')) {
+    if (
+      ['avif', 'avis'].includes(brand) ||
+      compatible.includes('avif') ||
+      compatible.includes('avis')
+    ) {
       return formatInfoOf('avif');
     }
-    if (['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand)) return formatInfoOf('heic');
+    if (['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx', 'mif1', 'msf1'].includes(brand))
+      return formatInfoOf('heic');
     return formatInfoOf('video');
   }
   // 42 is classic TIFF, 43 is BigTIFF: the same magic in a different width, so
   // the analyser gets to explain why the wide one is refused.
   const tiffMagic = (b[2] === 0x2a || b[2] === 0x2b) && b[3] === 0x00;
   const tiffMagicBe = b[2] === 0x00 && (b[3] === 0x2a || b[3] === 0x2b);
-  if ((b[0] === 0x49 && b[1] === 0x49 && tiffMagic) || (b[0] === 0x4d && b[1] === 0x4d && tiffMagicBe)) {
+  if (
+    (b[0] === 0x49 && b[1] === 0x49 && tiffMagic) ||
+    (b[0] === 0x4d && b[1] === 0x4d && tiffMagicBe)
+  ) {
     return formatInfoOf('tiff');
   }
   if (b[0] === 0x42 && b[1] === 0x4d) return formatInfoOf('bmp');
-  if (b[0] === 0x00 && b[1] === 0x00 && b[2] === 0x00 && b[3] === 0x0c && ascii(b, 4, 4) === 'JXL ') {
+  if (
+    b[0] === 0x00 &&
+    b[1] === 0x00 &&
+    b[2] === 0x00 &&
+    b[3] === 0x0c &&
+    ascii(b, 4, 4) === 'JXL '
+  ) {
     return formatInfoOf('jxl');
   }
   if (b[0] === 0xff && b[1] === 0x0a) return formatInfoOf('jxl');
   if (ascii(b, 0, 4) === '%PDF') return formatInfoOf('pdf');
-  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3) return formatInfoOf('video');
+  if (b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3)
+    return formatInfoOf('video');
   if (b[0] === 0x42 && b[1] === 0x4d) return formatInfoOf('bmp');
 
   const text = ascii(b, 0, Math.min(b.length, 256)).trimStart();
-  if (text.startsWith('<svg') || (text.startsWith('<?xml') && text.includes('<svg'))) return formatInfoOf('svg');
+  if (text.startsWith('<svg') || (text.startsWith('<?xml') && text.includes('<svg')))
+    return formatInfoOf('svg');
   if (text.startsWith('<') && text.includes('</svg>')) return formatInfoOf('svg');
 
   return formatInfoOf('unknown');

@@ -122,7 +122,10 @@ export function walkJumbf(boxes: readonly JumbfBox[]): JumbfBox[] {
   return out;
 }
 
-export function findBox(boxes: readonly JumbfBox[], predicate: (box: JumbfBox) => boolean): JumbfBox | undefined {
+export function findBox(
+  boxes: readonly JumbfBox[],
+  predicate: (box: JumbfBox) => boolean,
+): JumbfBox | undefined {
   for (const box of boxes) {
     if (predicate(box)) return box;
     if (box.children) {
@@ -131,8 +134,4 @@ export function findBox(boxes: readonly JumbfBox[], predicate: (box: JumbfBox) =
     }
   }
   return undefined;
-}
-
-export function isC2paLabel(label: string): boolean {
-  return label === 'c2pa' || label.startsWith('c2pa.');
 }

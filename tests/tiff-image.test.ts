@@ -10,7 +10,19 @@ import { DEFAULT_STRIP_OPTIONS } from '../src/core/types.ts';
  * ------------------------------------------------------------------ */
 
 const TYPE_SIZE: Record<number, number> = {
-  1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8, 13: 4,
+  1: 1,
+  2: 1,
+  3: 2,
+  4: 4,
+  5: 8,
+  6: 1,
+  7: 1,
+  8: 2,
+  9: 4,
+  10: 8,
+  11: 4,
+  12: 8,
+  13: 4,
 };
 
 interface Entry {
@@ -104,24 +116,42 @@ function buildTiff(spec: BuildSpec): Uint8Array {
   const states: PageState[] = [];
 
   for (const page of pages) {
-    const dataEntries = page.withData === false
-      ? null
-      : {
-          offsets: { tag: page.offsetTag ?? 0x0111, type: 4, data: new Uint8Array(page.strips.length * 4) },
-          counts: { tag: page.countsTag ?? 0x0117, type: 4, data: new Uint8Array(page.strips.length * 4) },
-        };
+    const dataEntries =
+      page.withData === false
+        ? null
+        : {
+            offsets: {
+              tag: page.offsetTag ?? 0x0111,
+              type: 4,
+              data: new Uint8Array(page.strips.length * 4),
+            },
+            counts: {
+              tag: page.countsTag ?? 0x0117,
+              type: 4,
+              data: new Uint8Array(page.strips.length * 4),
+            },
+          };
     const pointers: Entry[] = (page.extras ?? []).map((extra) => ({
       tag: extra.pointerTag,
       type: 4,
       data: new Uint8Array(4),
     }));
-    const subfile: Entry[] = page.subfileType === undefined
-      ? []
-      : [{ tag: 0x00fe, type: 4, data: u32(page.subfileType, little) }];
+    const subfile: Entry[] =
+      page.subfileType === undefined
+        ? []
+        : [{ tag: 0x00fe, type: 4, data: u32(page.subfileType, little) }];
     const data: Entry[] = dataEntries ? [dataEntries.offsets, dataEntries.counts] : [];
 
-    const entries = [...page.entries, ...subfile, ...pointers, ...data].sort((a, b) => a.tag - b.tag);
-    const state: PageState = { dirOffset: cursor, entries, extras: [], stripOffsets: [], dataEntries };
+    const entries = [...page.entries, ...subfile, ...pointers, ...data].sort(
+      (a, b) => a.tag - b.tag,
+    );
+    const state: PageState = {
+      dirOffset: cursor,
+      entries,
+      extras: [],
+      stripOffsets: [],
+      dataEntries,
+    };
     states.push(state);
 
     cursor += 2 + entries.length * 12 + 4;
@@ -154,8 +184,16 @@ function buildTiff(spec: BuildSpec): Uint8Array {
   pages.forEach((page, index) => {
     const state = states[index]!;
     if (state.dataEntries) {
-      state.dataEntries.offsets.data = numbers(page.offsetOverride ?? state.stripOffsets, 4, little);
-      state.dataEntries.counts.data = numbers(page.strips.map((strip) => strip.length), 4, little);
+      state.dataEntries.offsets.data = numbers(
+        page.offsetOverride ?? state.stripOffsets,
+        4,
+        little,
+      );
+      state.dataEntries.counts.data = numbers(
+        page.strips.map((strip) => strip.length),
+        4,
+        little,
+      );
     }
     for (const extra of state.extras) {
       const pointer = state.entries.find((entry) => entry.tag === extra.pointerTag);
@@ -190,10 +228,12 @@ function buildTiff(spec: BuildSpec): Uint8Array {
   states.forEach((state, index) => {
     const next = index + 1 < states.length ? states[index + 1]!.dirOffset : (spec.nextIfd ?? 0);
     writeIfd(state.dirOffset, state.entries, next);
-    for (const entry of state.entries) if (entry.data.length > 4) write(valueAt.get(entry) ?? 0, entry.data);
+    for (const entry of state.entries)
+      if (entry.data.length > 4) write(valueAt.get(entry) ?? 0, entry.data);
     for (const extra of state.extras) writeIfd(extra.offset, extra.entries, 0);
     for (const extra of state.extras) {
-      for (const entry of extra.entries) if (entry.data.length > 4) write(valueAt.get(entry) ?? 0, entry.data);
+      for (const entry of extra.entries)
+        if (entry.data.length > 4) write(valueAt.get(entry) ?? 0, entry.data);
     }
     pages[index]!.strips.forEach((strip, at) => write(state.stripOffsets[at] ?? 0, strip));
   });
@@ -214,12 +254,15 @@ interface ReadBack {
 
 function readTiff(bytes: Uint8Array, ifdOffset = 8): ReadBack {
   const little = bytes[0] === 0x49;
-  const rd16 = (at: number): number => (little ? bytes[at]! | (bytes[at + 1]! << 8) : (bytes[at]! << 8) | bytes[at + 1]!);
+  const rd16 = (at: number): number =>
+    little ? bytes[at]! | (bytes[at + 1]! << 8) : (bytes[at]! << 8) | bytes[at + 1]!;
   const rd32 = (at: number): number => {
     const b = [bytes[at]!, bytes[at + 1]!, bytes[at + 2]!, bytes[at + 3]!];
-    return (little
-      ? b[0]! | (b[1]! << 8) | (b[2]! << 16) | (b[3]! << 24)
-      : (b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0;
+    return (
+      (little
+        ? b[0]! | (b[1]! << 8) | (b[2]! << 16) | (b[3]! << 24)
+        : (b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0
+    );
   };
   const count = rd16(ifdOffset);
   const dirs = new Map<number, { type: number; count: number; data: Uint8Array }>();
@@ -229,10 +272,13 @@ function readTiff(bytes: Uint8Array, ifdOffset = 8): ReadBack {
     const type = rd16(at + 2);
     const items = rd32(at + 4);
     const size = (TYPE_SIZE[type] ?? 1) * items;
-    const data = size <= 4 ? bytes.slice(at + 8, at + 8 + size) : (() => {
-      const offset = rd32(at + 8);
-      return bytes.slice(offset, offset + size);
-    })();
+    const data =
+      size <= 4
+        ? bytes.slice(at + 8, at + 8 + size)
+        : (() => {
+            const offset = rd32(at + 8);
+            return bytes.slice(offset, offset + size);
+          })();
     dirs.set(tag, { type, count: items, data });
   }
   return { little, dirs, next: rd32(ifdOffset + 2 + count * 12) };
@@ -249,9 +295,11 @@ function payload(
   const reader = (data: Uint8Array, index: number): number => {
     const at = index * 4;
     const b = [data[at]!, data[at + 1]!, data[at + 2]!, data[at + 3]!];
-    return (ifd.little
-      ? b[0]! | (b[1]! << 8) | (b[2]! << 16) | (b[3]! << 24)
-      : (b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0;
+    return (
+      (ifd.little
+        ? b[0]! | (b[1]! << 8) | (b[2]! << 16) | (b[3]! << 24)
+        : (b[0]! << 24) | (b[1]! << 16) | (b[2]! << 8) | b[3]!) >>> 0
+    );
   };
   const offsets = ifd.dirs.get(offsetTag)!;
   const counts = ifd.dirs.get(countsTag)!;
@@ -276,8 +324,12 @@ function jpegSegment(marker: number, body: readonly number[]): number[] {
 function tinyJpeg(withExif: boolean): Uint8Array {
   const out: number[] = [0xff, 0xd8];
   if (withExif) {
-    const tiff = [0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-    out.push(...jpegSegment(0xe1, [...'Exif\u0000\u0000'].map((char) => char.charCodeAt(0)).concat(tiff)));
+    const tiff = [
+      0x49, 0x49, 0x2a, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    ];
+    out.push(
+      ...jpegSegment(0xe1, [...'Exif\u0000\u0000'].map((char) => char.charCodeAt(0)).concat(tiff)),
+    );
   }
   out.push(...jpegSegment(0xc0, [8, 0, 2, 0, 2, 1, 1, 0x11, 0])); // SOF0, 2x2, 1 component
   out.push(...jpegSegment(0xda, [1, 1, 0x00, 0, 63, 0])); // SOS
@@ -472,10 +524,12 @@ describe('TIFF stripping', () => {
     const source = buildTiff({
       ifd0: [...baseEntries(true), ...metaEntries()],
       strips: [WHITE_STRIP],
-      pages: [{
-        entries: [...baseEntries(true), ...metaEntries()],
-        strips: [GREY_STRIP],
-      }],
+      pages: [
+        {
+          entries: [...baseEntries(true), ...metaEntries()],
+          strips: [GREY_STRIP],
+        },
+      ],
     });
     const result = await stripSource(sourceFromBytes(source));
     const output = new Uint8Array(await result.blob.arrayBuffer());
@@ -496,11 +550,13 @@ describe('TIFF stripping', () => {
     const source = buildTiff({
       ifd0: [...baseEntries(true), ...metaEntries()],
       strips: [WHITE_STRIP],
-      pages: [{
-        entries: [...baseEntries(true), ...metaEntries()],
-        strips: [GREY_STRIP],
-        subfileType: 1,
-      }],
+      pages: [
+        {
+          entries: [...baseEntries(true), ...metaEntries()],
+          strips: [GREY_STRIP],
+          subfileType: 1,
+        },
+      ],
     });
 
     const scan = await scanSource(sourceFromBytes(source));
@@ -519,7 +575,9 @@ describe('TIFF stripping', () => {
     expect(Buffer.from(dirty).includes('Exif\u0000\u0000')).toBe(true);
 
     const entries = (): Entry[] =>
-      baseEntries(true).map((entry) => (entry.tag === 0x0103 ? { ...entry, data: u16(7, true) } : entry));
+      baseEntries(true).map((entry) =>
+        entry.tag === 0x0103 ? { ...entry, data: u16(7, true) } : entry,
+      );
     const source = buildTiff({ ifd0: entries(), strips: [dirty, clean] });
 
     const scan = await scanSource(sourceFromBytes(source));
@@ -587,10 +645,14 @@ describe('TIFF metadata listing', () => {
       strips: [WHITE_STRIP],
     });
     const kept = await inspectBlob(sourceFromBytes(bytes).blob, { keepIcc: true });
-    const icc = kept.groups.find((group) => group.id === 'ifd0')!.items.find((item) => item.id === '0x8773');
+    const icc = kept.groups
+      .find((group) => group.id === 'ifd0')!
+      .items.find((item) => item.id === '0x8773');
     expect(icc?.removed).toBe(false);
     const dropped = await inspectBlob(sourceFromBytes(bytes).blob, { keepIcc: false });
-    const iccDropped = dropped.groups.find((group) => group.id === 'ifd0')!.items.find((item) => item.id === '0x8773');
+    const iccDropped = dropped.groups
+      .find((group) => group.id === 'ifd0')!
+      .items.find((item) => item.id === '0x8773');
     expect(iccDropped?.removed).toBe(true);
   });
 });

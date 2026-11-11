@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MetadataReport } from '../core/metadata.ts';
 import type { C2paManifest, Field, Finding } from '../core/types.ts';
+import { useModal } from '../hooks/useModal.ts';
 import type { Item } from '../hooks/useWorkspace.ts';
 import { useI18n } from '../i18n/index.tsx';
 import type { MessageKey } from '../i18n/zh.ts';
@@ -20,20 +21,11 @@ import {
   SparkIcon,
   XIcon,
 } from './Icons.tsx';
+import { BlobImage } from './BlobImage.tsx';
 import { MetadataTable } from './MetadataTable.tsx';
 
 type Group = NonNullable<Field['group']>;
 const GROUP_ORDER: Group[] = ['gps', 'device', 'author', 'time', 'software', 'capture', 'other'];
-
-function BlobImage({ blob, alt, className }: { blob: Blob; alt: string; className?: string }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    const objectUrl = URL.createObjectURL(blob);
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [blob]);
-  return url ? <img className={className} src={url} alt={alt} loading="lazy" decoding="async" /> : null;
-}
 
 function FieldGroup({ fields }: { fields: Field[] }) {
   const { t } = useI18n();
@@ -83,7 +75,12 @@ function FindingBody({ finding }: { finding: Finding }) {
             {finding.params.lat}, {finding.params.lon}
           </span>
           {typeof finding.params.mapUrl === 'string' && (
-            <a href={finding.params.mapUrl} target="_blank" rel="noreferrer noopener" className="text-link">
+            <a
+              href={finding.params.mapUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-link"
+            >
               {t('drawer.map')}
             </a>
           )}
@@ -116,9 +113,15 @@ function C2paCard({ manifest }: { manifest: C2paManifest }) {
   const rows: { label: string; value?: string }[] = [
     { label: t('c2pa.generator'), value: manifest.claimGenerator },
     { label: t('c2pa.signer'), value: manifest.signer },
-    { label: t('c2pa.issuer'), value: manifest.issuer === manifest.signer ? undefined : manifest.issuer },
+    {
+      label: t('c2pa.issuer'),
+      value: manifest.issuer === manifest.signer ? undefined : manifest.issuer,
+    },
     { label: t('c2pa.algorithm'), value: manifest.algorithm },
-    { label: t('c2pa.validity'), value: validityText(manifest.certValidFrom, manifest.certValidTo) },
+    {
+      label: t('c2pa.validity'),
+      value: validityText(manifest.certValidFrom, manifest.certValidTo),
+    },
   ].filter((row) => Boolean(row.value));
 
   return (
@@ -199,7 +202,8 @@ function iconFor(finding: Finding) {
 
 function FindingCard({ finding }: { finding: Finding }) {
   const { t } = useI18n();
-  const tr = (key: string, params?: Record<string, string | number>) => t(key as MessageKey, params);
+  const tr = (key: string, params?: Record<string, string | number>) =>
+    t(key as MessageKey, params);
   const desc = tr(`${finding.id}.desc`);
 
   return (
@@ -231,6 +235,12 @@ interface Props {
 
 type Tab = 'privacy' | 'structure' | 'meta';
 
+const TABS: { id: Tab; key: MessageKey }[] = [
+  { id: 'privacy', key: 'drawer.privacy' },
+  { id: 'structure', key: 'drawer.structure' },
+  { id: 'meta', key: 'drawer.metadata' },
+];
+
 export function DetailsDrawer({
   item,
   onClose,
@@ -251,9 +261,6 @@ export function DetailsDrawer({
 
   // Before/after comparison. The stripped listing is fetched on demand too,
   // even later than the source one: most people never open this view.
-  const dialogRef = useRef<HTMLElement | null>(null);
-  const openerRef = useRef<HTMLElement | null>(null);
-
   const [compareOn, setCompareOn] = useState(false);
   const [after, setAfter] = useState<{
     loading: boolean;
@@ -263,6 +270,8 @@ export function DetailsDrawer({
   const afterLoadedFor = useRef<Blob | null>(null);
   const itemId = item?.id;
   const resultBlob = item?.result?.blob ?? null;
+  // Focus, scroll locking and Escape belong to the shared modal behaviour.
+  const modal = useModal(itemId !== undefined, onClose);
 
   useEffect(() => {
     setTab('privacy');
@@ -323,60 +332,33 @@ export function DetailsDrawer({
     };
   }, [compareOn, itemId, resultBlob, onLoadResultMetadata]);
 
-  // Focus moves into the dialog when it opens, so Tab does not keep walking the
-  // page behind it, and goes back to the button that opened it on close.
-  useEffect(() => {
-    if (!itemId) return undefined;
-    const active = document.activeElement;
-    openerRef.current = active instanceof HTMLElement ? active : null;
-    dialogRef.current?.focus();
-    return () => {
-      const opener = openerRef.current;
-      openerRef.current = null;
-      if (opener?.isConnected) opener.focus();
-    };
-  }, [itemId]);
-
-  useEffect(() => {
-    if (!item) return undefined;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [item, onClose]);
-
-  // A modal dialog has to wrap Tab at both ends, otherwise focus lands on the
-  // page underneath a panel the user cannot see.
-  const trapTab = (event: React.KeyboardEvent<HTMLElement>): void => {
-    if (event.key !== 'Tab') return;
-    const root = event.currentTarget;
-    const nodes = Array.from(
-      root.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      ),
-    ).filter((node) => node.getClientRects().length > 0);
-    const first = nodes[0];
-    const last = nodes[nodes.length - 1];
-    if (!first || !last) {
-      event.preventDefault();
-      return;
+  // A tablist is expected to move with the arrow keys, Home and End rather
+  // than requiring a Tab stop per tab.
+  const onTabKey = (event: React.KeyboardEvent<HTMLDivElement>): void => {
+    const index = TABS.findIndex((entry) => entry.id === tab);
+    const last = TABS.length - 1;
+    let next: number;
+    switch (event.key) {
+      case 'ArrowRight':
+        next = index === last ? 0 : index + 1;
+        break;
+      case 'ArrowLeft':
+        next = index === 0 ? last : index - 1;
+        break;
+      case 'Home':
+        next = 0;
+        break;
+      case 'End':
+        next = last;
+        break;
+      default:
+        return;
     }
-    const active = document.activeElement;
-    if (!(active instanceof Node) || !root.contains(active)) {
-      event.preventDefault();
-      first.focus();
-      return;
-    }
-    if (event.shiftKey && (active === first || active === root)) {
-      event.preventDefault();
-      last.focus();
-      return;
-    }
-    if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
+    event.preventDefault();
+    const entry = TABS[next];
+    if (!entry) return;
+    setTab(entry.id);
+    document.getElementById(`drawer-tab-${entry.id}`)?.focus();
   };
 
   if (!item) return null;
@@ -385,18 +367,26 @@ export function DetailsDrawer({
   const findings = (scan?.findings ?? []).filter((finding) => finding.category !== 'icc');
   const kept = (scan?.findings ?? []).filter((finding) => finding.category === 'icc');
   const canDownload = item.state === 'done' || item.state === 'clean';
+  // Chrome decodes neither HEIC nor TIFF, so the preview says why it is empty
+  // instead of showing two broken images.
+  const previewNotice =
+    scan?.format === 'heic'
+      ? t('notice.heif.preview')
+      : scan?.format === 'tiff'
+        ? t('notice.tiff.preview')
+        : undefined;
 
   return (
     <div className="drawer-layer">
       <div className="drawer-backdrop" role="presentation" onClick={onClose} />
       <aside
-        ref={dialogRef}
+        ref={modal.ref}
         className="drawer"
         role="dialog"
         aria-modal="true"
         aria-label={t('drawer.title')}
         tabIndex={-1}
-        onKeyDown={trapTab}
+        onKeyDown={modal.onKeyDown}
         data-wide={tab === 'meta' && compareOn ? 'true' : undefined}
       >
         <header className="drawer-head">
@@ -413,101 +403,109 @@ export function DetailsDrawer({
               )}
             </p>
           </div>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label={t('actions.close')}>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onClose}
+            aria-label={t('actions.close')}
+          >
             <XIcon size={18} />
           </button>
         </header>
 
-        <div className="drawer-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'privacy'}
-            className={tab === 'privacy' ? 'is-active' : ''}
-            onClick={() => setTab('privacy')}
-          >
-            {t('drawer.privacy')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'structure'}
-            className={tab === 'structure' ? 'is-active' : ''}
-            onClick={() => setTab('structure')}
-          >
-            {t('drawer.structure')}
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'meta'}
-            className={tab === 'meta' ? 'is-active' : ''}
-            onClick={() => setTab('meta')}
-          >
-            {t('drawer.metadata')}
-          </button>
+        <div
+          className="drawer-tabs"
+          role="tablist"
+          aria-label={t('drawer.title')}
+          onKeyDown={onTabKey}
+        >
+          {TABS.map((entry) => (
+            <button
+              key={entry.id}
+              id={`drawer-tab-${entry.id}`}
+              type="button"
+              role="tab"
+              aria-selected={tab === entry.id}
+              aria-controls={`drawer-panel-${entry.id}`}
+              tabIndex={tab === entry.id ? 0 : -1}
+              className={tab === entry.id ? 'is-active' : ''}
+              onClick={() => setTab(entry.id)}
+            >
+              {t(entry.key)}
+            </button>
+          ))}
         </div>
 
         <div className="drawer-body">
-          {tab === 'privacy' && (
-            <>
-              {item.state === 'unsupported' && (
-                <div className="callout callout--warn">
-                  <AlertIcon size={17} />
-                  <span>
-                    {t('error.unsupported', {
-                      format: (scan?.format ?? 'FILE').toUpperCase(),
-                    })}
+          <div
+            role="tabpanel"
+            id="drawer-panel-privacy"
+            aria-labelledby="drawer-tab-privacy"
+            tabIndex={0}
+            hidden={tab !== 'privacy'}
+          >
+            {item.state === 'unsupported' && (
+              <div className="callout callout--warn">
+                <AlertIcon size={17} />
+                <span>
+                  {t('error.unsupported', {
+                    format: (scan?.format ?? 'FILE').toUpperCase(),
+                  })}
+                </span>
+              </div>
+            )}
+            {item.state === 'error' && (
+              <div className="callout callout--bad">
+                <AlertIcon size={17} />
+                <span>{t('error.unreadable')}</span>
+              </div>
+            )}
+            {scan?.supported && findings.length === 0 && (
+              <div className="callout callout--ok">
+                <CheckIcon size={17} />
+                <span>{t('drawer.noFindings')}</span>
+              </div>
+            )}
+            {findings.map((finding, index) => (
+              <FindingCard key={`${finding.id}-${index}`} finding={finding} />
+            ))}
+            {kept.map((finding, index) => (
+              <article className="finding finding--kept" key={`kept-${index}`}>
+                <header className="finding-head">
+                  <span className="finding-icon">
+                    <SparkIcon size={17} />
                   </span>
-                </div>
-              )}
-              {item.state === 'error' && (
-                <div className="callout callout--bad">
-                  <AlertIcon size={17} />
-                  <span>{t('error.unreadable')}</span>
-                </div>
-              )}
-              {scan?.supported && findings.length === 0 && (
-                <div className="callout callout--ok">
-                  <CheckIcon size={17} />
-                  <span>{t('drawer.noFindings')}</span>
-                </div>
-              )}
-              {findings.map((finding, index) => (
-                <FindingCard key={`${finding.id}-${index}`} finding={finding} />
-              ))}
-              {kept.map((finding, index) => (
-                <article className="finding finding--kept" key={`kept-${index}`}>
-                  <header className="finding-head">
-                    <span className="finding-icon">
-                      <SparkIcon size={17} />
-                    </span>
-                    <div className="finding-title">
-                      <h3>{t(finding.id as MessageKey)}</h3>
-                      <p>{t(`${finding.id}.desc` as MessageKey)}</p>
-                    </div>
-                    <span className="badge" data-tone="low">
-                      {t('drawer.kept')}
-                    </span>
-                  </header>
-                </article>
-              ))}
-              {(scan?.warnings ?? []).length > 0 && (
-                <div className="warnings">
-                  <h4>{t('drawer.warnings')}</h4>
-                  <ul>
-                    {(scan?.warnings ?? []).map((warning, index) => (
-                      <li key={index} data-severity={warning.severity}>
-                        {t(warning.id as MessageKey, warning.params)}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </>
-          )}
+                  <div className="finding-title">
+                    <h3>{t(finding.id as MessageKey)}</h3>
+                    <p>{t(`${finding.id}.desc` as MessageKey)}</p>
+                  </div>
+                  <span className="badge" data-tone="low">
+                    {t('drawer.kept')}
+                  </span>
+                </header>
+              </article>
+            ))}
+            {(scan?.warnings ?? []).length > 0 && (
+              <div className="warnings">
+                <h4>{t('drawer.warnings')}</h4>
+                <ul>
+                  {(scan?.warnings ?? []).map((warning, index) => (
+                    <li key={index} data-severity={warning.severity}>
+                      {t(warning.id as MessageKey, warning.params)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
 
-          {tab === 'meta' && (
+          <div
+            role="tabpanel"
+            id="drawer-panel-meta"
+            aria-labelledby="drawer-tab-meta"
+            tabIndex={0}
+            hidden={tab !== 'meta'}
+          >
             <MetadataTable
               report={meta.report}
               loading={meta.loading}
@@ -520,11 +518,25 @@ export function DetailsDrawer({
                 report: after.report,
                 loading: after.loading,
                 error: after.error,
+                preview: {
+                  before: item.file,
+                  after: resultBlob,
+                  reencoded: item.result?.reencoded ?? false,
+                  notice: previewNotice,
+                  orientationLost:
+                    !(item.result?.reencoded ?? false) && (item.scan?.orientation ?? 1) > 1,
+                },
               }}
             />
-          )}
+          </div>
 
-          {tab === 'structure' && (
+          <div
+            role="tabpanel"
+            id="drawer-panel-structure"
+            aria-labelledby="drawer-tab-structure"
+            tabIndex={0}
+            hidden={tab !== 'structure'}
+          >
             <div className="structure">
               {item.state === 'unsupported' ? (
                 <p className="muted">{t('drawer.noPreview')}</p>
@@ -556,7 +568,7 @@ export function DetailsDrawer({
                 </table>
               )}
             </div>
-          )}
+          </div>
         </div>
 
         <footer className="drawer-foot">

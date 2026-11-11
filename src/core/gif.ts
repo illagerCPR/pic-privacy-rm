@@ -8,7 +8,14 @@
 import { ascii, decodeText, u16le } from './bytes.ts';
 import { buildXmpFindings } from './findings.ts';
 import { readAt, type Source } from './source.ts';
-import type { BlockInfo, ContainerAnalysis, Finding, Part, StripOptions, Warning } from './types.ts';
+import type {
+  BlockInfo,
+  ContainerAnalysis,
+  Finding,
+  Part,
+  StripOptions,
+  Warning,
+} from './types.ts';
 import { parseXmp } from './xmp.ts';
 
 const MAX_META = 4 * 1024 * 1024;
@@ -39,7 +46,8 @@ export async function analyzeGif(src: Source, opts: StripOptions): Promise<Conta
   const hasGct = (packed & 0x80) !== 0;
   const gctSize = hasGct ? 3 * (1 << ((packed & 0x07) + 1)) : 0;
   const headerEnd = 13 + gctSize;
-  if (headerEnd > src.size) return failed([{ id: 'warn.gif.truncated', severity: 'error' }], src.size);
+  if (headerEnd > src.size)
+    return failed([{ id: 'warn.gif.truncated', severity: 'error' }], src.size);
 
   parts.push({ kind: 'slice', start: 0, end: headerEnd });
   blocks.push({ name: `Header ${signature}`, bytes: 13, kept: true });
@@ -138,11 +146,20 @@ export async function analyzeGif(src: Source, opts: StripOptions): Promise<Conta
           const payload = stripXmpMagic(data);
           findings.push(...buildXmpFindings(parseXmp(payload)));
           droppedBytes += end - blockStart;
-          blocks.push({ name: 'Application extension (XMP)', bytes: end - blockStart, kept: false, note: 'XMP' });
+          blocks.push({
+            name: 'Application extension (XMP)',
+            bytes: end - blockStart,
+            kept: false,
+            note: 'XMP',
+          });
           pos = end;
           continue;
         }
-        blocks.push({ name: `Application extension ${identifier.trim() || '(unnamed)'}`, bytes: end - blockStart, kept: true });
+        blocks.push({
+          name: `Application extension ${identifier.trim() || '(unnamed)'}`,
+          bytes: end - blockStart,
+          kept: true,
+        });
         parts.push({ kind: 'slice', start: blockStart, end });
         pos = end;
         continue;
@@ -153,7 +170,11 @@ export async function analyzeGif(src: Source, opts: StripOptions): Promise<Conta
         data = scanned.data;
         end = scanned.pos;
         comments += 1;
-        const text = data ? decodeText(data).replace(/\u0000/g, '').trim() : '';
+        const text = data
+          ? decodeText(data)
+              .replace(/\u0000/g, '')
+              .trim()
+          : '';
         if (text) {
           findings.push({
             id: 'finding.comment.gif',
@@ -165,7 +186,12 @@ export async function analyzeGif(src: Source, opts: StripOptions): Promise<Conta
           });
         }
         droppedBytes += end - blockStart;
-        blocks.push({ name: 'Comment extension', bytes: end - blockStart, kept: false, note: 'comment' });
+        blocks.push({
+          name: 'Comment extension',
+          bytes: end - blockStart,
+          kept: false,
+          note: 'comment',
+        });
         pos = end;
         continue;
       }
@@ -175,7 +201,16 @@ export async function analyzeGif(src: Source, opts: StripOptions): Promise<Conta
       const scanned = await readSubBlocks(pos + 2 + (fixed > 0 ? 1 + fixed : 0));
       end = scanned.pos;
       parts.push({ kind: 'slice', start: blockStart, end });
-      blocks.push({ name: label === 0xf9 ? 'Graphic control' : label === 0x01 ? 'Plain text' : `Extension 0x${label.toString(16)}`, bytes: end - blockStart, kept: true });
+      blocks.push({
+        name:
+          label === 0xf9
+            ? 'Graphic control'
+            : label === 0x01
+              ? 'Plain text'
+              : `Extension 0x${label.toString(16)}`,
+        bytes: end - blockStart,
+        kept: true,
+      });
       pos = end;
       continue;
     }
@@ -200,7 +235,12 @@ export async function analyzeGif(src: Source, opts: StripOptions): Promise<Conta
   if (!sawTrailer) warnings.push({ id: 'warn.gif.noTrailer', severity: 'error' });
   if (frames === 0) warnings.push({ id: 'warn.gif.noFrames', severity: 'error' });
   if (comments > 0) {
-    findings.push({ id: 'finding.comment.summary', category: 'comment', severity: 'low', params: { count: comments } });
+    findings.push({
+      id: 'finding.comment.summary',
+      category: 'comment',
+      severity: 'low',
+      params: { count: comments },
+    });
   }
   if (frames > 1) {
     findings.push({
@@ -237,8 +277,17 @@ export function stripXmpMagic(data: Uint8Array | undefined): Uint8Array {
 
 function failed(warnings: Warning[], fileSize: number): ContainerAnalysis {
   return {
-    format: 'gif', mime: 'image/gif', ext: 'gif', parts: [], findings: [],
-    warnings, orientation: 0, blocks: [], droppedBytes: 0, keptBytes: fileSize, ok: false,
+    format: 'gif',
+    mime: 'image/gif',
+    ext: 'gif',
+    parts: [],
+    findings: [],
+    warnings,
+    orientation: 0,
+    blocks: [],
+    droppedBytes: 0,
+    keptBytes: fileSize,
+    ok: false,
   };
 }
 

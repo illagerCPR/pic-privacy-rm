@@ -91,7 +91,13 @@ function actionsFromAssertion(box: JumbfBox): C2paAction[] {
   return actions;
 }
 
-function signatureInfo(box: JumbfBox): { algorithm?: string; signer?: string; issuer?: string; validFrom?: string; validTo?: string } {
+function signatureInfo(box: JumbfBox): {
+  algorithm?: string;
+  signer?: string;
+  issuer?: string;
+  validFrom?: string;
+  validTo?: string;
+} {
   try {
     const cose = decodeCbor(contentPayload(box));
     if (!Array.isArray(cose) || cose.length < 1) return {};
@@ -130,7 +136,9 @@ function extensionToMime(label: string): string {
 function summarizeManifest(manifest: JumbfBox): C2paManifest {
   const all = walkJumbf([manifest]);
   const claimBox = all.find((b) => b.label === 'c2pa.claim' || b.label.startsWith('c2pa.claim.'));
-  const signatureBox = all.find((b) => b.label === 'c2pa.signature' || b.label.startsWith('c2pa.claim-signature'));
+  const signatureBox = all.find(
+    (b) => b.label === 'c2pa.signature' || b.label.startsWith('c2pa.claim-signature'),
+  );
   const assertionBoxes = all.filter((b) => b.label === 'c2pa.assertions');
   const thumbnailBox = all.find((b) => b.label.startsWith('c2pa.thumbnail'));
 
@@ -173,7 +181,9 @@ function summarizeManifest(manifest: JumbfBox): C2paManifest {
   const hasThumbnail = thumbnailBytes !== null;
   const thumbnail = thumbnailBytes
     ? {
-        blob: new Blob([thumbnailBytes.slice()], { type: extensionToMime(thumbnailBox?.label ?? '') }),
+        blob: new Blob([thumbnailBytes.slice()], {
+          type: extensionToMime(thumbnailBox?.label ?? ''),
+        }),
         mime: extensionToMime(thumbnailBox?.label ?? ''),
       }
     : undefined;
@@ -223,7 +233,10 @@ function findManifests(boxes: readonly JumbfBox[]): JumbfBox[] {
       found.push(...nested);
       continue;
     }
-    if (box.type === 'jumb' && (box.label === 'c2pa.manifest' || box.label.startsWith('c2pa.manifest.'))) {
+    if (
+      box.type === 'jumb' &&
+      (box.label === 'c2pa.manifest' || box.label.startsWith('c2pa.manifest.'))
+    ) {
       found.push(box);
       continue;
     }

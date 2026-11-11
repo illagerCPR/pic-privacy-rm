@@ -435,7 +435,9 @@ function formatTiffTag(tag: number, value: TiffValue): Formatted | null {
     case 0x9c9f: {
       // XP* tags store UTF-16LE bytes in a BYTE entry.
       const raw = value.bytes ?? EMPTY;
-      const text = decodeUtf16le(raw).replace(/\u0000+$/g, '').trim();
+      const text = decodeUtf16le(raw)
+        .replace(/\u0000+$/g, '')
+        .trim();
       return { text: text.length > 0 ? text : '(empty)' };
     }
     default:
@@ -484,7 +486,9 @@ function formatExifTag(tag: number, value: TiffValue): Formatted | null {
     }
     case 0x8822: {
       const v = nums[0];
-      return withLabel(v, EXPOSURE_PROGRAM) ? { text: withLabel(v, EXPOSURE_PROGRAM) as string } : null;
+      return withLabel(v, EXPOSURE_PROGRAM)
+        ? { text: withLabel(v, EXPOSURE_PROGRAM) as string }
+        : null;
     }
     case 0x9207: {
       const v = nums[0];

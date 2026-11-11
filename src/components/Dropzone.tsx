@@ -1,9 +1,10 @@
 import { useRef, useState } from 'react';
 import { useI18n } from '../i18n/index.tsx';
+import { directoryOf, type IncomingFile } from '../lib/files.ts';
 import { ClipboardIcon, FolderIcon, ImagePlusIcon } from './Icons.tsx';
 
 interface Props {
-  onFiles: (files: File[]) => void;
+  onFiles: (files: IncomingFile[]) => void;
   compact: boolean;
   dragging: boolean;
 }
@@ -22,13 +23,16 @@ export function Dropzone({ onFiles, compact, dragging }: Props) {
     setPasting(true);
     try {
       const items = await navigator.clipboard.read();
-      const files: File[] = [];
+      const files: IncomingFile[] = [];
       for (const item of items) {
         for (const type of item.types) {
           if (!type.startsWith('image/')) continue;
           const blob = await item.getType(type);
           const ext = type === 'image/jpeg' ? 'jpg' : (type.split('/')[1] ?? 'png');
-          files.push(new File([blob], `clipboard-${Date.now()}.${ext}`, { type }));
+          files.push({
+            file: new File([blob], `clipboard-${Date.now()}.${ext}`, { type }),
+            dir: '',
+          });
         }
       }
       if (files.length > 0) onFiles(files);
@@ -41,11 +45,7 @@ export function Dropzone({ onFiles, compact, dragging }: Props) {
 
   return (
     <section
-      className={[
-        'dropzone',
-        compact ? 'dropzone--compact' : '',
-        dragging ? 'is-dragging' : '',
-      ]
+      className={['dropzone', compact ? 'dropzone--compact' : '', dragging ? 'is-dragging' : '']
         .filter(Boolean)
         .join(' ')}
       aria-label={t('a11y.dropzone')}
@@ -89,7 +89,7 @@ export function Dropzone({ onFiles, compact, dragging }: Props) {
         multiple
         hidden
         onChange={(event) => {
-          const files = Array.from(event.target.files ?? []);
+          const files = Array.from(event.target.files ?? []).map((file) => ({ file, dir: '' }));
           if (files.length > 0) onFiles(files);
           event.target.value = '';
         }}
@@ -102,7 +102,11 @@ export function Dropzone({ onFiles, compact, dragging }: Props) {
         // Non-standard but supported by Chromium and Safari; harmless elsewhere.
         {...{ webkitdirectory: '', directory: '' }}
         onChange={(event) => {
-          const files = Array.from(event.target.files ?? []).filter((file) => file.type !== '');
+          // The folder picker reports the tree in webkitRelativePath; the ZIP
+          // mirrors it so a shoot comes back out in the same folders.
+          const files = Array.from(event.target.files ?? [])
+            .filter((file) => file.type !== '')
+            .map((file) => ({ file, dir: directoryOf(file.webkitRelativePath ?? '') }));
           if (files.length > 0) onFiles(files);
           event.target.value = '';
         }}

@@ -10,7 +10,14 @@ import { summarizeExifBlock } from './exif.ts';
 import { buildC2paFindings, buildExifFindings, buildXmpFindings } from './findings.ts';
 import { parseJumbf } from './jumbf.ts';
 import { readAt, type Source } from './source.ts';
-import type { BlockInfo, ContainerAnalysis, Finding, Part, StripOptions, Warning } from './types.ts';
+import type {
+  BlockInfo,
+  ContainerAnalysis,
+  Finding,
+  Part,
+  StripOptions,
+  Warning,
+} from './types.ts';
 import { parseXmp } from './xmp.ts';
 
 const KEEP_CHUNKS = new Set(['VP8 ', 'VP8L', 'VP8X', 'ALPH', 'ANIM', 'ANMF', 'ICCP']);
@@ -91,12 +98,17 @@ export async function analyzeWebp(src: Source, opts: StripOptions): Promise<Cont
     const name = CHUNK_NAMES[chunk.fourcc] ?? chunk.fourcc;
     blocks.push({ name, bytes: chunk.end - chunk.start, kept: chunk.keep });
 
-    if (chunk.fourcc === 'VP8 ' || chunk.fourcc === 'VP8L' || chunk.fourcc === 'ANMF') sawImage = true;
+    if (chunk.fourcc === 'VP8 ' || chunk.fourcc === 'VP8L' || chunk.fourcc === 'ANMF')
+      sawImage = true;
 
     if (chunk.keep) continue;
 
     droppedBytes += chunk.end - chunk.start;
-    const wanted = chunk.fourcc === 'EXIF' || chunk.fourcc === 'XMP ' || chunk.fourcc === 'C2PA' || chunk.fourcc === 'JUMBF';
+    const wanted =
+      chunk.fourcc === 'EXIF' ||
+      chunk.fourcc === 'XMP ' ||
+      chunk.fourcc === 'C2PA' ||
+      chunk.fourcc === 'JUMBF';
     if (!wanted || chunk.size === 0) continue;
     const payload = await readAt(src, chunk.dataStart, Math.min(chunk.size, MAX_META));
     chunk.payload = payload;
@@ -115,7 +127,12 @@ export async function analyzeWebp(src: Source, opts: StripOptions): Promise<Cont
           });
         }
       } else {
-        findings.push({ id: 'finding.exif.unparsed', category: 'exif', severity: 'medium', bytes: chunk.size });
+        findings.push({
+          id: 'finding.exif.unparsed',
+          category: 'exif',
+          severity: 'medium',
+          bytes: chunk.size,
+        });
       }
     } else if (chunk.fourcc === 'XMP ') {
       findings.push(...buildXmpFindings(parseXmp(payload)));
@@ -123,7 +140,12 @@ export async function analyzeWebp(src: Source, opts: StripOptions): Promise<Cont
       try {
         findings.push(...buildC2paFindings(summarizeC2pa(parseJumbf(payload), chunk.size)));
       } catch {
-        findings.push({ id: 'finding.jumbf', category: 'c2pa', severity: 'high', bytes: chunk.size });
+        findings.push({
+          id: 'finding.jumbf',
+          category: 'c2pa',
+          severity: 'high',
+          bytes: chunk.size,
+        });
       }
     }
   }
@@ -137,7 +159,15 @@ export async function analyzeWebp(src: Source, opts: StripOptions): Promise<Cont
       bytes: trailer,
       params: { bytes: trailer },
     });
-    if (!opts.truncateTrailer) chunks.push({ fourcc: '', start: pos, dataStart: pos, size: trailer, end: src.size, keep: true });
+    if (!opts.truncateTrailer)
+      chunks.push({
+        fourcc: '',
+        start: pos,
+        dataStart: pos,
+        size: trailer,
+        end: src.size,
+        keep: true,
+      });
     else droppedBytes += trailer;
   }
 
@@ -150,7 +180,10 @@ export async function analyzeWebp(src: Source, opts: StripOptions): Promise<Cont
   const parts: Part[] = [];
   const fileHeader = new Uint8Array(12);
   fileHeader.set([0x52, 0x49, 0x46, 0x46], 0); // RIFF
-  fileHeader.set([riffSize & 0xff, (riffSize >>> 8) & 0xff, (riffSize >>> 16) & 0xff, (riffSize >>> 24) & 0xff], 4);
+  fileHeader.set(
+    [riffSize & 0xff, (riffSize >>> 8) & 0xff, (riffSize >>> 16) & 0xff, (riffSize >>> 24) & 0xff],
+    4,
+  );
   fileHeader.set([0x57, 0x45, 0x42, 0x50], 8); // WEBP
   parts.push({ kind: 'bytes', bytes: fileHeader });
 
@@ -167,7 +200,10 @@ export async function analyzeWebp(src: Source, opts: StripOptions): Promise<Cont
       const chunkHeader = new Uint8Array(8);
       chunkHeader.set([0x56, 0x50, 0x38, 0x58], 0); // VP8X
       chunkHeader.set([patched.length & 0xff, (patched.length >>> 8) & 0xff, 0, 0], 4);
-      const padded = patched.length % 2 === 1 ? new Uint8Array([...chunkHeader, ...patched, 0]) : new Uint8Array([...chunkHeader, ...patched]);
+      const padded =
+        patched.length % 2 === 1
+          ? new Uint8Array([...chunkHeader, ...patched, 0])
+          : new Uint8Array([...chunkHeader, ...patched]);
       parts.push({ kind: 'bytes', bytes: padded });
     } else {
       parts.push({ kind: 'slice', start: chunk.start, end: chunk.end });
@@ -197,7 +233,16 @@ export async function analyzeWebp(src: Source, opts: StripOptions): Promise<Cont
 
 function failed(warnings: Warning[], fileSize: number): ContainerAnalysis {
   return {
-    format: 'webp', mime: 'image/webp', ext: 'webp', parts: [], findings: [],
-    warnings, orientation: 0, blocks: [], droppedBytes: 0, keptBytes: fileSize, ok: false,
+    format: 'webp',
+    mime: 'image/webp',
+    ext: 'webp',
+    parts: [],
+    findings: [],
+    warnings,
+    orientation: 0,
+    blocks: [],
+    droppedBytes: 0,
+    keptBytes: fileSize,
+    ok: false,
   };
 }

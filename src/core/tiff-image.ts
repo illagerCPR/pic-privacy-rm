@@ -46,15 +46,69 @@ import { parseXmp } from './xmp.ts';
 
 /** Entries a decoder needs, plus colour data. Everything else is removed. */
 const KEEP_TAGS = new Set<number>([
-  0x00fe, 0x00ff, // NewSubfileType, SubfileType
-  0x0100, 0x0101, 0x0102, 0x0103, 0x0106, 0x0107, 0x0108, 0x0109, 0x010a,
-  0x0111, 0x0112, 0x0115, 0x0116, 0x0117, 0x0118, 0x0119, 0x011a, 0x011b, 0x011c,
-  0x011e, 0x011f, 0x0122, 0x0123, 0x0124, 0x0125, 0x0128, 0x012d,
-  0x013d, 0x013e, 0x013f, 0x0140, 0x0141, 0x0142, 0x0143, 0x0144, 0x0145,
-  0x014c, 0x014d, 0x014e, 0x0150, 0x0152, 0x0153, 0x0154, 0x0155, 0x0156,
-  0x0157, 0x0158, 0x0159, 0x015a, 0x015b,
-  0x0200, 0x0203, 0x0205, 0x0206, 0x0207, 0x0208, 0x0209,
-  0x0211, 0x0212, 0x0213, 0x0214,
+  0x00fe,
+  0x00ff, // NewSubfileType, SubfileType
+  0x0100,
+  0x0101,
+  0x0102,
+  0x0103,
+  0x0106,
+  0x0107,
+  0x0108,
+  0x0109,
+  0x010a,
+  0x0111,
+  0x0112,
+  0x0115,
+  0x0116,
+  0x0117,
+  0x0118,
+  0x0119,
+  0x011a,
+  0x011b,
+  0x011c,
+  0x011e,
+  0x011f,
+  0x0122,
+  0x0123,
+  0x0124,
+  0x0125,
+  0x0128,
+  0x012d,
+  0x013d,
+  0x013e,
+  0x013f,
+  0x0140,
+  0x0141,
+  0x0142,
+  0x0143,
+  0x0144,
+  0x0145,
+  0x014c,
+  0x014d,
+  0x014e,
+  0x0150,
+  0x0152,
+  0x0153,
+  0x0154,
+  0x0155,
+  0x0156,
+  0x0157,
+  0x0158,
+  0x0159,
+  0x015a,
+  0x015b,
+  0x0200,
+  0x0203,
+  0x0205,
+  0x0206,
+  0x0207,
+  0x0208,
+  0x0209,
+  0x0211,
+  0x0212,
+  0x0213,
+  0x0214,
   0x8773, // ICC profile (subject to the keepIcc setting)
 ]);
 
@@ -92,13 +146,26 @@ const DESCRIPTIVE_TAGS = new Set<number>([
   0x4746, // Rating
   0x4749, // RatingPercent
   0x8298, // Copyright
-  0x9c9b, 0x9c9c, 0x9c9d, 0x9c9e, 0x9c9f, // XPTitle … XPSubject
+  0x9c9b,
+  0x9c9c,
+  0x9c9d,
+  0x9c9e,
+  0x9c9f, // XPTitle … XPSubject
   // Exif tags that some writers put straight into IFD0 instead of a sub-IFD.
-  0x9003, 0x9004, 0x9010, 0x9011, 0x9012, // DateTimeOriginal … OffsetTime
+  0x9003,
+  0x9004,
+  0x9010,
+  0x9011,
+  0x9012, // DateTimeOriginal … OffsetTime
   0xa420, // ImageUniqueID
-  0xa430, 0xa431, // CameraOwnerName, BodySerialNumber
-  0xa432, 0xa433, 0xa434, 0xa435, // lens identity
-  0xa436, 0xa437, // ImageTitle, Photographer
+  0xa430,
+  0xa431, // CameraOwnerName, BodySerialNumber
+  0xa432,
+  0xa433,
+  0xa434,
+  0xa435, // lens identity
+  0xa436,
+  0xa437, // ImageTitle, Photographer
 ]);
 
 /** Timestamps that only appear next to DateTime. */
@@ -191,7 +258,11 @@ async function readIfd(src: Source, offset: number, little: boolean): Promise<Ra
 }
 
 /** Pull a value into memory. Returns null when it is out of range or huge. */
-async function readValue(src: Source, entry: RawEntry, cap = MAX_VALUE_READ): Promise<Uint8Array | null> {
+async function readValue(
+  src: Source,
+  entry: RawEntry,
+  cap = MAX_VALUE_READ,
+): Promise<Uint8Array | null> {
   if (entry.size === 0) return new Uint8Array(0);
   if (entry.size <= 4) return entry.field.subarray(0, entry.size);
   if (entry.size > cap || entry.valueOffset + entry.size > src.size) return null;
@@ -200,10 +271,19 @@ async function readValue(src: Source, entry: RawEntry, cap = MAX_VALUE_READ): Pr
 }
 
 function toTag(entry: RawEntry, bytes: Uint8Array, little: boolean): TiffTag {
-  return { tag: entry.tag, type: entry.type, count: entry.count, value: decodeTiffValue(entry.type, entry.count, bytes, little) };
+  return {
+    tag: entry.tag,
+    type: entry.type,
+    count: entry.count,
+    value: decodeTiffValue(entry.type, entry.count, bytes, little),
+  };
 }
 
-function firstNumber(entry: RawEntry | undefined, bytes: Uint8Array | null, little: boolean): number | undefined {
+function firstNumber(
+  entry: RawEntry | undefined,
+  bytes: Uint8Array | null,
+  little: boolean,
+): number | undefined {
   if (!entry || !bytes) return undefined;
   return decodeTiffValue(entry.type, entry.count, bytes, little).nums[0];
 }
@@ -278,7 +358,8 @@ function describeEntry(
   const value = decodeTiffValue(entry.type, entry.count, bytes, little);
   let text = value.text ?? '';
   if (!text && value.nums.length > 0) {
-    text = value.nums.length > 8 ? `${value.nums.slice(0, 8).join(', ')}, …` : value.nums.join(', ');
+    text =
+      value.nums.length > 8 ? `${value.nums.slice(0, 8).join(', ')}, …` : value.nums.join(', ');
   }
   if (!text && value.bytes) text = `(${value.bytes.length} bytes)`;
   if (entry.tag === MAKER_NOTE) text = `(${entry.size} bytes, vendor private)`;
@@ -311,9 +392,7 @@ async function ifdFields(
  * Analyser
  * ------------------------------------------------------------------ */
 
-type Payload =
-  | { kind: 'slice'; start: number; end: number }
-  | { kind: 'bytes'; bytes: Uint8Array };
+type Payload = { kind: 'slice'; start: number; end: number } | { kind: 'bytes'; bytes: Uint8Array };
 
 interface Segment {
   /** Source range of the segment. */
@@ -448,21 +527,37 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
     if (byTag.has(SUB_IFDS)) return fail('warn.tiff.subIfds');
     if (byTag.has(DNG_VERSION)) return fail('warn.tiff.raw', { format: 'DNG' });
 
-    const compression = firstNumber(byTag.get(COMPRESSION), await maybeRead(src, byTag.get(COMPRESSION)), little);
+    const compression = firstNumber(
+      byTag.get(COMPRESSION),
+      await maybeRead(src, byTag.get(COMPRESSION)),
+      little,
+    );
     // Old-style JPEG keeps the stream behind tag 0x0201 as a whole; that is a
     // different document layout, so it is refused rather than guessed at.
     if (compression === 6) return fail('warn.tiff.jpegOldStyle');
 
-    const photometric = firstNumber(byTag.get(PHOTOMETRIC), await maybeRead(src, byTag.get(PHOTOMETRIC)), little);
+    const photometric = firstNumber(
+      byTag.get(PHOTOMETRIC),
+      await maybeRead(src, byTag.get(PHOTOMETRIC)),
+      little,
+    );
     if (photometric === 32803) return fail('warn.tiff.raw', { format: 'CFA' });
 
     // A reduced-resolution directory is a thumbnail, not a page: it is a copy
     // of a picture we are about to clean, and it stays behind otherwise.
-    const subfile = firstNumber(byTag.get(SUBFILE_TYPE), await maybeRead(src, byTag.get(SUBFILE_TYPE)), little);
+    const subfile = firstNumber(
+      byTag.get(SUBFILE_TYPE),
+      await maybeRead(src, byTag.get(SUBFILE_TYPE)),
+      little,
+    );
     const reduced = subfile !== undefined && (subfile & 1) === 1;
     const preview = byTag.get(JPEG_PREVIEW);
     if (index > 0 && (reduced || preview !== undefined)) {
-      const count = firstNumber(byTag.get(JPEG_PREVIEW_LENGTH), await maybeRead(src, byTag.get(JPEG_PREVIEW_LENGTH)), little);
+      const count = firstNumber(
+        byTag.get(JPEG_PREVIEW_LENGTH),
+        await maybeRead(src, byTag.get(JPEG_PREVIEW_LENGTH)),
+        little,
+      );
       thumbnails.push({
         dir,
         index,
@@ -490,7 +585,8 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
 
     const offsets = numbersOf(offsetsEntry, offsetsBytes, little);
     const counts = numbersOf(countsEntry, countsBytes, little);
-    if (offsets.length === 0 || offsets.length !== counts.length) return fail('warn.tiff.stripTable');
+    if (offsets.length === 0 || offsets.length !== counts.length)
+      return fail('warn.tiff.stripTable');
 
     const segments: Segment[] = [];
     for (let i = 0; i < offsets.length; i += 1) {
@@ -507,13 +603,17 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
       const tables = byTag.get(JPEG_TABLES);
       if (tables) {
         const bytes = await readValue(src, tables, 1 << 20);
-        if (bytes && (containsMarker(bytes, 'Exif\u0000\u0000') || containsMarker(bytes, 'x:xmpmeta'))) {
+        if (
+          bytes &&
+          (containsMarker(bytes, 'Exif\u0000\u0000') || containsMarker(bytes, 'x:xmpmeta'))
+        ) {
           return fail('warn.tiff.jpegTables');
         }
       }
       for (const segment of segments) {
         if (segment.count === 0) continue;
-        if (segment.count > MAX_INNER_JPEG) return fail('warn.tiff.jpegInner', { index: index + 1 });
+        if (segment.count > MAX_INNER_JPEG)
+          return fail('warn.tiff.jpegInner', { index: index + 1 });
         const bytes = await readAt(src, segment.start, segment.count);
         if (bytes.length !== segment.count) return fail('warn.tiff.truncated');
         const inner = await analyzeJpeg(sourceFromBytes(bytes), opts);
@@ -552,7 +652,12 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
   const layouts: PageLayout[] = [];
   let cursor = 8;
   for (const page of pages) {
-    const layout: PageLayout = { dirOffset: cursor, valueAt: new Map(), pads: new Map(), dataPad: 0 };
+    const layout: PageLayout = {
+      dirOffset: cursor,
+      valueAt: new Map(),
+      pads: new Map(),
+      dataPad: 0,
+    };
     layouts.push(layout);
     page.dirOffset = cursor;
     cursor += 2 + page.kept.length * 12 + 4;
@@ -568,7 +673,10 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
     cursor += layout.dataPad;
     for (const segment of page.segments) {
       segment.at = cursor;
-      cursor += segment.output.kind === 'slice' ? segment.output.end - segment.output.start : segment.output.bytes.length;
+      cursor +=
+        segment.output.kind === 'slice'
+          ? segment.output.end - segment.output.start
+          : segment.output.bytes.length;
     }
   }
   const totalSize = cursor;
@@ -588,9 +696,10 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
     page.segments.forEach((segment, at) => putU32(offsetTable, at * 4, segment.at, little));
     const countTable = new Uint8Array(page.segments.length * 4);
     page.segments.forEach((segment, at) => {
-      const length = segment.output.kind === 'slice'
-        ? segment.output.end - segment.output.start
-        : segment.output.bytes.length;
+      const length =
+        segment.output.kind === 'slice'
+          ? segment.output.end - segment.output.start
+          : segment.output.bytes.length;
       putU32(countTable, at * 4, length, little);
     });
 
@@ -600,11 +709,12 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
       putU16(ifd, at + 2, isComputed(page, entry) ? 4 : entry.type, little);
       putU32(ifd, at + 4, isComputed(page, entry) ? page.segments.length : entry.count, little);
       if (inlineOut(page, entry)) {
-        const body = entry.tag === page.offsetsTag
-          ? offsetTable
-          : entry.tag === page.countsTag
-            ? countTable
-            : entry.field.subarray(0, 4);
+        const body =
+          entry.tag === page.offsetsTag
+            ? offsetTable
+            : entry.tag === page.countsTag
+              ? countTable
+              : entry.field.subarray(0, 4);
         ifd.set(body.subarray(0, 4), at + 8);
       } else {
         putU32(ifd, at + 8, layout.valueAt.get(entry.tag) ?? 0, little);
@@ -626,10 +736,16 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
 
     for (const entry of page.kept) {
       if (inlineOut(page, entry)) continue;
-      for (let i = 0; i < (layout.pads.get(entry.tag) ?? 0); i += 1) parts.push({ kind: 'bytes', bytes: zero });
+      for (let i = 0; i < (layout.pads.get(entry.tag) ?? 0); i += 1)
+        parts.push({ kind: 'bytes', bytes: zero });
       if (entry.tag === page.offsetsTag) parts.push({ kind: 'bytes', bytes: offsetTable });
       else if (entry.tag === page.countsTag) parts.push({ kind: 'bytes', bytes: countTable });
-      else parts.push({ kind: 'slice', start: entry.valueOffset, end: entry.valueOffset + entry.size });
+      else
+        parts.push({
+          kind: 'slice',
+          start: entry.valueOffset,
+          end: entry.valueOffset + entry.size,
+        });
     }
 
     for (let i = 0; i < layout.dataPad; i += 1) parts.push({ kind: 'bytes', bytes: zero });
@@ -644,14 +760,14 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
 
   /* ---- findings --------------------------------------------------- */
   const findings: Finding[] = [];
-  const blocks: BlockInfo[] = [
-    { name: 'TIFF header', bytes: 8, kept: true },
-  ];
+  const blocks: BlockInfo[] = [{ name: 'TIFF header', bytes: 8, kept: true }];
 
   const iptcSeen = new Set<string>();
   const addIptc = (summary: IptcSummary | null): void => {
     if (!summary) return;
-    const signature = summary.datasets.map((dataset) => `${dataset.key}=${dataset.value}`).join('\u0000');
+    const signature = summary.datasets
+      .map((dataset) => `${dataset.key}=${dataset.value}`)
+      .join('\u0000');
     if (signature.length > 0) {
       if (iptcSeen.has(signature)) return;
       iptcSeen.add(signature);
@@ -681,15 +797,20 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
       note: `${page.kept.length} kept`,
     });
     for (const segment of page.segments) {
-      dataBytes += segment.output.kind === 'slice'
-        ? segment.output.end - segment.output.start
-        : segment.output.bytes.length;
+      dataBytes +=
+        segment.output.kind === 'slice'
+          ? segment.output.end - segment.output.start
+          : segment.output.bytes.length;
     }
   }
 
   for (const page of pages) {
     for (const entry of page.dropped) {
-      if (DESCRIPTIVE_TAGS.has(entry.tag) || TIME_EXTRAS.has(entry.tag) || entry.tag === USER_COMMENT) {
+      if (
+        DESCRIPTIVE_TAGS.has(entry.tag) ||
+        TIME_EXTRAS.has(entry.tag) ||
+        entry.tag === USER_COMMENT
+      ) {
         descriptiveBytes += entry.size;
         const bytes = await readValue(src, entry, 64 * 1024);
         if (!bytes) continue;
@@ -734,8 +855,14 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
         });
         continue;
       }
-      if (entry.tag === EXIF_POINTER || entry.tag === GPS_POINTER || entry.tag === INTEROP_POINTER) continue;
-      if (entry.tag === JPEG_PREVIEW || entry.tag === JPEG_PREVIEW_LENGTH || entry.tag === JPEG_TABLES) continue;
+      if (entry.tag === EXIF_POINTER || entry.tag === GPS_POINTER || entry.tag === INTEROP_POINTER)
+        continue;
+      if (
+        entry.tag === JPEG_PREVIEW ||
+        entry.tag === JPEG_PREVIEW_LENGTH ||
+        entry.tag === JPEG_TABLES
+      )
+        continue;
       unknownTags += 1;
       unknownBytes += entry.size;
     }
@@ -761,7 +888,12 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
         const makerNote = exifIfd.entries.find((entry) => entry.tag === MAKER_NOTE);
         if (makerNote) blocks.push({ name: 'MakerNote', bytes: makerNote.size, kept: false });
       } else {
-        findings.push({ id: 'finding.exif.unparsed', category: 'exif', severity: 'medium', bytes: exifPointer?.size ?? 0 });
+        findings.push({
+          id: 'finding.exif.unparsed',
+          category: 'exif',
+          severity: 'medium',
+          bytes: exifPointer?.size ?? 0,
+        });
       }
     }
 
@@ -871,7 +1003,8 @@ export async function analyzeTiff(src: Source, opts: StripOptions): Promise<Cont
     let preview: { blob: Blob; mime: string } | undefined;
     if (thumbnail.preview) {
       const bytes = await readAt(src, thumbnail.preview.start, thumbnail.preview.count);
-      if (bytes.length > 0) preview = { blob: new Blob([bytes.slice()], { type: 'image/jpeg' }), mime: 'image/jpeg' };
+      if (bytes.length > 0)
+        preview = { blob: new Blob([bytes.slice()], { type: 'image/jpeg' }), mime: 'image/jpeg' };
     }
     findings.push({
       id: 'finding.exif.thumbnail',

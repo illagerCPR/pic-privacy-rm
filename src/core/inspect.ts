@@ -46,11 +46,7 @@ const XMP_EXT_HEADER = 'http://ns.adobe.com/xmp/extension/\0';
  * Group builders
  * ------------------------------------------------------------------ */
 
-function group(
-  id: MetadataGroup['id'],
-  items: MetadataItem[],
-  removed = true,
-): MetadataGroup {
+function group(id: MetadataGroup['id'], items: MetadataItem[], removed = true): MetadataGroup {
   return { id, titleKey: `meta.group.${id}`, removed, items };
 }
 
@@ -61,7 +57,11 @@ function exifGroups(payload: Uint8Array): MetadataGroup[] {
   if (groups) return groups;
   return [
     group('exif', [
-      { name: 'EXIF', value: `(${payload.length} bytes, structure not readable)`, size: payload.length },
+      {
+        name: 'EXIF',
+        value: `(${payload.length} bytes, structure not readable)`,
+        size: payload.length,
+      },
     ]),
   ];
 }
@@ -106,17 +106,27 @@ function c2paGroups(payload: Uint8Array): MetadataGroup[] {
   const items: MetadataItem[] = [];
   for (const manifest of summary.manifests) {
     // Nested JUMBF boxes sometimes surface as empty manifests; skip the noise.
-    if (!manifest.claimGenerator && manifest.actions.length === 0 && manifest.assertionLabels.length === 0) {
+    if (
+      !manifest.claimGenerator &&
+      manifest.actions.length === 0 &&
+      manifest.assertionLabels.length === 0
+    ) {
       continue;
     }
     const prefix = manifest.label;
-    items.push({ name: `${prefix} · claim generator`, value: manifest.claimGenerator ?? '(unknown)' });
+    items.push({
+      name: `${prefix} · claim generator`,
+      value: manifest.claimGenerator ?? '(unknown)',
+    });
     if (manifest.title) items.push({ name: `${prefix} · title`, value: manifest.title });
     if (manifest.signer) items.push({ name: `${prefix} · signer`, value: manifest.signer });
     if (manifest.issuer) items.push({ name: `${prefix} · issuer`, value: manifest.issuer });
-    if (manifest.certValidFrom) items.push({ name: `${prefix} · cert valid from`, value: manifest.certValidFrom });
-    if (manifest.certValidTo) items.push({ name: `${prefix} · cert valid to`, value: manifest.certValidTo });
-    if (manifest.algorithm) items.push({ name: `${prefix} · signing algorithm`, value: manifest.algorithm });
+    if (manifest.certValidFrom)
+      items.push({ name: `${prefix} · cert valid from`, value: manifest.certValidFrom });
+    if (manifest.certValidTo)
+      items.push({ name: `${prefix} · cert valid to`, value: manifest.certValidTo });
+    if (manifest.algorithm)
+      items.push({ name: `${prefix} · signing algorithm`, value: manifest.algorithm });
     items.push({
       name: `${prefix} · assertions`,
       value: manifest.assertionLabels.join(', ') || '(none)',
@@ -147,7 +157,9 @@ function splitNul(bytes: Uint8Array): { key: string; rest: Uint8Array } | null {
 
 async function inflateText(bytes: Uint8Array): Promise<string> {
   try {
-    const stream = new Blob([bytes.slice()]).stream().pipeThrough(new DecompressionStream('deflate'));
+    const stream = new Blob([bytes.slice()])
+      .stream()
+      .pipeThrough(new DecompressionStream('deflate'));
     const buffer = await new Response(stream).arrayBuffer();
     return new TextDecoder('utf-8', { fatal: false }).decode(buffer);
   } catch {
@@ -156,7 +168,9 @@ async function inflateText(bytes: Uint8Array): Promise<string> {
 }
 
 function describeApp1(payload: Uint8Array): string {
-  const head = ascii(payload, 0, Math.min(20, payload.length)).replace(/\u0000/g, '').trim();
+  const head = ascii(payload, 0, Math.min(20, payload.length))
+    .replace(/\u0000/g, '')
+    .trim();
   return head ? `APP1 ${head}` : 'APP1';
 }
 
@@ -183,7 +197,13 @@ function finish(
     // some depend on the settings (ICC), the rest go. The badge only claims a
     // removal when at least one listed entry is actually dropped, so a stripped
     // file's listing never says "removed" next to a block that survived.
-    out.push(group('container', container, container.some((item) => item.removed !== false)));
+    out.push(
+      group(
+        'container',
+        container,
+        container.some((item) => item.removed !== false),
+      ),
+    );
   }
   return out;
 }
@@ -245,7 +265,9 @@ async function inspectJpeg(src: Source, opts: InspectOptions): Promise<MetadataG
       if (startsWithBytes(payload, 0, 'Photoshop')) groups.push(...iptcGroups(payload));
       else container.push({ name: 'APP13', value: `(${payload.length} bytes)` });
     } else if (marker === 0xfe) {
-      const comment = decodeText(payload).replace(/\u0000/g, '').trim();
+      const comment = decodeText(payload)
+        .replace(/\u0000/g, '')
+        .trim();
       if (comment) text.push({ name: 'COM comment', value: comment.slice(0, MAX_TEXT) });
     } else if (marker >= 0xe0 && marker <= 0xef) {
       // APP0 JFIF and APP14 Adobe are the two the decoder asks for; they are
@@ -260,7 +282,11 @@ async function inspectJpeg(src: Source, opts: InspectOptions): Promise<MetadataG
           : marker === 0xee
             ? 'APP14 Adobe'
             : `APP${marker - 0xe0}`;
-      container.push({ name, value: `(${payload.length} bytes)`, removed: kept ? false : undefined });
+      container.push({
+        name,
+        value: `(${payload.length} bytes)`,
+        removed: kept ? false : undefined,
+      });
     }
   }
 
@@ -294,7 +320,8 @@ async function inspectPng(src: Source, opts: InspectOptions): Promise<MetadataGr
       groups.push(...c2paGroups(payload));
     } else if (type === 'tEXt') {
       const split = splitNul(payload);
-      if (split) text.push({ name: `tEXt ${split.key}`, value: decodeText(split.rest).slice(0, MAX_TEXT) });
+      if (split)
+        text.push({ name: `tEXt ${split.key}`, value: decodeText(split.rest).slice(0, MAX_TEXT) });
     } else if (type === 'zTXt') {
       const split = splitNul(payload);
       if (split) {
@@ -309,7 +336,9 @@ async function inspectPng(src: Source, opts: InspectOptions): Promise<MetadataGr
         const translated = lang ? splitNul(lang.rest) : null;
         if (translated) {
           const body =
-            flag === 1 ? new TextEncoder().encode(await inflateText(translated.rest)) : translated.rest;
+            flag === 1
+              ? new TextEncoder().encode(await inflateText(translated.rest))
+              : translated.rest;
           if (first.key.toLowerCase().includes('xmp')) {
             // PNG keeps XMP in a tEXt-family chunk, usually iTXt.
             groups.push(...xmpGroups(body));
@@ -365,7 +394,9 @@ async function inspectWebp(src: Source, opts: InspectOptions): Promise<MetadataG
     const dataStart = pos + 8;
     const end = Math.min(src.size, dataStart + size);
     const payload =
-      end > dataStart ? await readAt(src, dataStart, Math.min(end - dataStart, MAX_META)) : new Uint8Array(0);
+      end > dataStart
+        ? await readAt(src, dataStart, Math.min(end - dataStart, MAX_META))
+        : new Uint8Array(0);
     pos = dataStart + size + (size % 2);
 
     if (fourcc === 'EXIF') {
@@ -390,7 +421,10 @@ async function inspectWebp(src: Source, opts: InspectOptions): Promise<MetadataG
  * GIF
  * ------------------------------------------------------------------ */
 
-async function readSubBlocks(src: Source, start: number): Promise<{ data: Uint8Array; pos: number }> {
+async function readSubBlocks(
+  src: Source,
+  start: number,
+): Promise<{ data: Uint8Array; pos: number }> {
   const pieces: Uint8Array[] = [];
   let pos = start;
   let guard = 0;
@@ -442,7 +476,9 @@ async function inspectGif(src: Source): Promise<MetadataGroup[]> {
       }
       if (label === 0xfe) {
         const scanned = await readSubBlocks(src, start);
-        const comment = decodeText(scanned.data).replace(/\u0000/g, '').trim();
+        const comment = decodeText(scanned.data)
+          .replace(/\u0000/g, '')
+          .trim();
         if (comment) text.push({ name: 'Comment', value: comment.slice(0, MAX_TEXT) });
         pos = scanned.pos;
         continue;
@@ -504,7 +540,11 @@ async function inspectHeif(src: Source): Promise<MetadataGroup[]> {
       else {
         groups.push(
           group('exif', [
-            { name: 'Exif item', value: `(${payload.length} bytes, structure not readable)`, size: payload.length },
+            {
+              name: 'Exif item',
+              value: `(${payload.length} bytes, structure not readable)`,
+              size: payload.length,
+            },
           ]),
         );
       }
@@ -536,7 +576,9 @@ async function inspectTiffFile(src: Source, opts: InspectOptions): Promise<Metad
       removed: false,
       items: group.items.map((item) => ({
         ...item,
-        removed: item.id ? tagPolicy(Number.parseInt(item.id, 16), opts.keepIcc) !== 'structural' : true,
+        removed: item.id
+          ? tagPolicy(Number.parseInt(item.id, 16), opts.keepIcc) !== 'structural'
+          : true,
       })),
     };
   });

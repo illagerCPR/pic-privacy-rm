@@ -13,19 +13,59 @@ import { summarizeExifBlock } from './exif.ts';
 import { buildC2paFindings, buildExifFindings, buildXmpFindings } from './findings.ts';
 import { parseJumbf } from './jumbf.ts';
 import { readAt, type Source } from './source.ts';
-import type { BlockInfo, ContainerAnalysis, Finding, Part, StripOptions, Warning } from './types.ts';
+import type {
+  BlockInfo,
+  ContainerAnalysis,
+  Finding,
+  Part,
+  StripOptions,
+  Warning,
+} from './types.ts';
 import { parseXmp } from './xmp.ts';
 
 const KEEP_CHUNKS = new Set([
-  'IHDR', 'PLTE', 'IDAT', 'IEND', 'tRNS',
-  'gAMA', 'cHRM', 'sRGB', 'iCCP', 'sBIT', 'bKGD', 'pHYs', 'hIST', 'sPLT',
-  'acTL', 'fcTL', 'fdAT',
-  'cICP', 'mDCv', 'cLLi', 'sTER',
+  'IHDR',
+  'PLTE',
+  'IDAT',
+  'IEND',
+  'tRNS',
+  'gAMA',
+  'cHRM',
+  'sRGB',
+  'iCCP',
+  'sBIT',
+  'bKGD',
+  'pHYs',
+  'hIST',
+  'sPLT',
+  'acTL',
+  'fcTL',
+  'fdAT',
+  'cICP',
+  'mDCv',
+  'cLLi',
+  'sTER',
 ]);
 
 const KNOWN_METADATA_CHUNKS = new Set([
-  'tEXt', 'zTXt', 'iTXt', 'eXIf', 'tIME', 'caBX', 'iDOT', 'vpAg', 'dSIG',
-  'prVW', 'mkBF', 'mkTS', 'oFFs', 'pCAL', 'sCAL', 'gIFg', 'gIFx', 'gIFt',
+  'tEXt',
+  'zTXt',
+  'iTXt',
+  'eXIf',
+  'tIME',
+  'caBX',
+  'iDOT',
+  'vpAg',
+  'dSIG',
+  'prVW',
+  'mkBF',
+  'mkTS',
+  'oFFs',
+  'pCAL',
+  'sCAL',
+  'gIFg',
+  'gIFx',
+  'gIFt',
 ]);
 
 const CHUNK_NAMES: Record<string, string> = {
@@ -70,9 +110,17 @@ export async function analyzePng(src: Source, opts: StripOptions): Promise<Conta
   const expected = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   if (src.size < 8 || signature.some((b, i) => b !== expected[i])) {
     return {
-      format: 'png', mime: 'image/png', ext: 'png', parts: [], findings: [],
-      warnings: [{ id: 'warn.notPng', severity: 'error' }], orientation: 0,
-      blocks: [], droppedBytes: 0, keptBytes: src.size, ok: false,
+      format: 'png',
+      mime: 'image/png',
+      ext: 'png',
+      parts: [],
+      findings: [],
+      warnings: [{ id: 'warn.notPng', severity: 'error' }],
+      orientation: 0,
+      blocks: [],
+      droppedBytes: 0,
+      keptBytes: src.size,
+      ok: false,
     };
   }
 
@@ -126,8 +174,30 @@ export async function analyzePng(src: Source, opts: StripOptions): Promise<Conta
         }
       }
       parts.push({ kind: 'slice', start: pos, end: chunkEnd });
-    } else if (type === 'tEXt' || type === 'zTXt' || type === 'iTXt' || type === 'eXIf' || type === 'caBX' || type === 'tIME') {
-      await readMetadataChunk(src, type, dataStart, length, { findings, textKeywords: (k) => { textCount += 1; textKeywords.push(k); } }, (o) => { orientation = o; });
+    } else if (
+      type === 'tEXt' ||
+      type === 'zTXt' ||
+      type === 'iTXt' ||
+      type === 'eXIf' ||
+      type === 'caBX' ||
+      type === 'tIME'
+    ) {
+      await readMetadataChunk(
+        src,
+        type,
+        dataStart,
+        length,
+        {
+          findings,
+          textKeywords: (k) => {
+            textCount += 1;
+            textKeywords.push(k);
+          },
+        },
+        (o) => {
+          orientation = o;
+        },
+      );
     }
 
     blocks.push({
@@ -168,7 +238,8 @@ export async function analyzePng(src: Source, opts: StripOptions): Promise<Conta
   if (!sawIdat) warnings.push({ id: 'warn.png.noData', severity: 'error' });
   if (!sawIend) warnings.push({ id: 'warn.png.noEnd', severity: 'error' });
 
-  const ok = sawIhdr && sawIdat && sawIend && !sawCgbi && !warnings.some((w) => w.severity === 'error');
+  const ok =
+    sawIhdr && sawIdat && sawIend && !sawCgbi && !warnings.some((w) => w.severity === 'error');
   return {
     format: 'png',
     mime: 'image/png',
@@ -214,7 +285,12 @@ async function readMetadataChunk(
         });
       }
     } else {
-      sink.findings.push({ id: 'finding.exif.unparsed', category: 'exif', severity: 'medium', bytes: length });
+      sink.findings.push({
+        id: 'finding.exif.unparsed',
+        category: 'exif',
+        severity: 'medium',
+        bytes: length,
+      });
     }
     return;
   }
@@ -224,7 +300,12 @@ async function readMetadataChunk(
       const boxes = parseJumbf(data);
       sink.findings.push(...buildC2paFindings(summarizeC2pa(boxes, length)));
     } catch {
-      sink.findings.push({ id: 'finding.jumbf', category: 'c2pa', severity: 'high', bytes: length });
+      sink.findings.push({
+        id: 'finding.jumbf',
+        category: 'c2pa',
+        severity: 'high',
+        bytes: length,
+      });
     }
     return;
   }
@@ -241,7 +322,9 @@ async function readMetadataChunk(
       id: 'finding.png.time',
       category: 'comment',
       severity: 'low',
-      params: { date: `${year}-${pad(month)}-${pad(day)} ${pad(hour)}:${pad(minute)}:${pad(second)}` },
+      params: {
+        date: `${year}-${pad(month)}-${pad(day)} ${pad(hour)}:${pad(minute)}:${pad(second)}`,
+      },
       bytes: length,
     });
     return;
@@ -250,7 +333,9 @@ async function readMetadataChunk(
   if (type === 'tEXt') {
     const nul = data.indexOf(0);
     const keyword = ascii(data, 0, nul >= 0 ? nul : data.length);
-    const value = new TextDecoder('utf-8', { fatal: false }).decode(data.subarray(nul + 1)).slice(0, 300);
+    const value = new TextDecoder('utf-8', { fatal: false })
+      .decode(data.subarray(nul + 1))
+      .slice(0, 300);
     if (keyword) sink.textKeywords(keyword);
     if (keyword === 'XML:com.adobe.xmp') {
       sink.findings.push(...buildXmpFindings(parseXmp(value ? data.subarray(nul + 1) : data)));
@@ -283,7 +368,9 @@ async function readMetadataChunk(
         cursor = end >= 0 ? end + 1 : data.length;
       }
       const body = data.subarray(cursor);
-      text = compressed ? await inflate(body) : new TextDecoder('utf-8', { fatal: false }).decode(body);
+      text = compressed
+        ? await inflate(body)
+        : new TextDecoder('utf-8', { fatal: false }).decode(body);
     }
     if (keyword) sink.textKeywords(keyword);
     if (keyword === 'XML:com.adobe.xmp') {
@@ -313,7 +400,9 @@ async function readMetadataChunk(
 
 async function inflate(bytes: Uint8Array): Promise<string> {
   try {
-    const stream = new Blob([bytes.slice()]).stream().pipeThrough(new DecompressionStream('deflate'));
+    const stream = new Blob([bytes.slice()])
+      .stream()
+      .pipeThrough(new DecompressionStream('deflate'));
     const buffer = await new Response(stream).arrayBuffer();
     return new TextDecoder('utf-8', { fatal: false }).decode(buffer).slice(0, 20000);
   } catch {

@@ -8,11 +8,49 @@ import { LockIcon, ShieldIcon, SparkIcon } from './components/Icons.tsx';
 import { PrivacyModal } from './components/PrivacyModal.tsx';
 import { Toasts, type ToastItem } from './components/Toasts.tsx';
 import { Toolbar, type Stats } from './components/Toolbar.tsx';
-import { useWorkspace } from './hooks/useWorkspace.ts';
+import { useWorkspace, type Item } from './hooks/useWorkspace.ts';
 import { useI18n } from './i18n/index.tsx';
 import type { MessageKey } from './i18n/zh.ts';
-import { filesFromDataTransfer } from './lib/files.ts';
+import type { Translate } from './i18n/index.tsx';
+import { buildCsv, type SummaryRow } from './lib/csv.ts';
+import { downloadBlob, summaryName } from './lib/download.ts';
+import { filesFromDataTransfer, type IncomingFile } from './lib/files.ts';
 import { createPipelineClient } from './lib/pipeline-client.ts';
+
+/** The row's status, as the spreadsheet should read it. */
+function statusLabel(item: Item, t: Translate): string {
+  switch (item.state) {
+    case 'scanning':
+      return t('status.scanning');
+    case 'ready':
+      return t('status.ready');
+    case 'clean':
+      return t('status.clean');
+    case 'stripping':
+      return t('status.stripping');
+    case 'done':
+      return t('status.done');
+    case 'unsupported':
+      return t('status.unsupported');
+    case 'failed':
+    case 'error':
+      return item.error ? t(item.error as MessageKey) : t('status.failed');
+  }
+}
+
+const CSV_COLUMNS: { column: keyof SummaryRow; key: MessageKey }[] = [
+  { column: 'file', key: 'csv.file' },
+  { column: 'format', key: 'csv.format' },
+  { column: 'size', key: 'csv.size' },
+  { column: 'status', key: 'csv.status' },
+  { column: 'findings', key: 'csv.findings' },
+  { column: 'categories', key: 'csv.categories' },
+  { column: 'dropped', key: 'csv.removed' },
+  { column: 'output', key: 'csv.output' },
+  { column: 'verify', key: 'csv.verify' },
+  { column: 'reencoded', key: 'csv.reencoded' },
+  { column: 'error', key: 'csv.error' },
+];
 
 function Hero() {
   const { t } = useI18n();
@@ -102,6 +140,31 @@ export default function App() {
     [removeItem],
   );
 
+  const exportCsv = useCallback(() => {
+    const rows: SummaryRow[] = items.map((item) => {
+      const findings = (item.scan?.findings ?? []).filter((finding) => finding.category !== 'icc');
+      return {
+        file: item.relPath ? `${item.relPath}/${item.name}` : item.name,
+        format: item.scan ? item.scan.format.toUpperCase() : '',
+        size: item.size,
+        status: statusLabel(item, t),
+        findings: findings.length,
+        categories: [...new Set(findings.map((finding) => finding.category))].join(' '),
+        dropped: item.scan?.droppedBytes ?? 0,
+        output: item.result?.size ?? '',
+        verify: item.result ? t(item.result.verify.ok ? 'csv.pass' : 'csv.fail') : '',
+        reencoded: item.result ? t(item.result.reencoded ? 'csv.yes' : 'csv.no') : '',
+        error: item.error ?? '',
+      };
+    });
+    const labels = Object.fromEntries(
+      CSV_COLUMNS.map(({ column, key }) => [column, t(key)]),
+    ) as Record<keyof SummaryRow, string>;
+    const csv = buildCsv(labels, rows);
+    downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), summaryName());
+    notify('toast.csv');
+  }, [items, notify, t]);
+
   const stats: Stats = useMemo(() => {
     let sensitive = 0;
     let reclaimable = 0;
@@ -147,7 +210,10 @@ export default function App() {
       });
     };
     const onPaste = (event: ClipboardEvent) => {
-      const files = Array.from(event.clipboardData?.files ?? []);
+      const files: IncomingFile[] = Array.from(event.clipboardData?.files ?? []).map((file) => ({
+        file,
+        dir: '',
+      }));
       if (files.length === 0) return;
       event.preventDefault();
       addFiles(files);
@@ -188,6 +254,7 @@ export default function App() {
               onStripAll={() => void workspace.stripAll()}
               onDownloadAll={() => void workspace.downloadAll()}
               onExportBatchReport={() => void workspace.exportBatchReport()}
+              onExportCsv={exportCsv}
               canExportBatch={items.some((item) => Boolean(item.scan))}
               onClear={workspace.clear}
               onCancelBatch={workspace.cancelBatch}
@@ -201,6 +268,7 @@ export default function App() {
             />
             <FileList
               items={items}
+              busy={workspace.busy}
               onDetails={openDetails}
               onStrip={stripOne}
               onDownload={downloadOne}
@@ -233,7 +301,10 @@ export default function App() {
 
       <PrivacyModal open={privacyOpen} onClose={() => setPrivacyOpen(false)} />
 
-      <Toasts toasts={toasts} onDismiss={(id) => setToasts((prev) => prev.filter((toast) => toast.id !== id))} />
+      <Toasts
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((toast) => toast.id !== id))}
+      />
     </>
   );
 }

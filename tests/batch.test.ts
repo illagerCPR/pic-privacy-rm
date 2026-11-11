@@ -48,11 +48,7 @@ describe('batch queue', () => {
   });
 
   it('counts a failed item as processed, not as skipped', async () => {
-    const outcome = await runBatch(
-      [1, 2],
-      async (item) => item !== 2,
-      createToken(),
-    );
+    const outcome = await runBatch([1, 2], async (item) => item !== 2, createToken());
     // run() returning false means "skipped"; the workspace returns true for a
     // strip that failed, because the row does say why.
     expect(outcome).toEqual({ done: 1, skipped: 1 });

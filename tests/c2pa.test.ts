@@ -6,7 +6,12 @@ import { parseJumbf } from '../src/core/jumbf.ts';
 const enc = new TextEncoder();
 
 function u32(value: number): Uint8Array {
-  return new Uint8Array([(value >>> 24) & 0xff, (value >>> 16) & 0xff, (value >>> 8) & 0xff, value & 0xff]);
+  return new Uint8Array([
+    (value >>> 24) & 0xff,
+    (value >>> 16) & 0xff,
+    (value >>> 8) & 0xff,
+    value & 0xff,
+  ]);
 }
 
 function concat(parts: Uint8Array[]): Uint8Array {
@@ -31,7 +36,10 @@ function jumd(label: string, tag: number, toggles = 3): Uint8Array {
   uuid[1] = (tag >>> 16) & 0xff;
   uuid[2] = (tag >>> 8) & 0xff;
   uuid[3] = tag & 0xff;
-  return box('jumd', concat([uuid, new Uint8Array([toggles]), enc.encode(label), new Uint8Array([0])]));
+  return box(
+    'jumd',
+    concat([uuid, new Uint8Array([toggles]), enc.encode(label), new Uint8Array([0])]),
+  );
 }
 
 function superbox(label: string, tag: number, children: Uint8Array[]): Uint8Array {
@@ -44,7 +52,10 @@ function cborText(text: string): Uint8Array {
 }
 
 function cborMap(entries: [string, Uint8Array][]): Uint8Array {
-  return concat([new Uint8Array([0xa0 | entries.length]), ...entries.flatMap(([key, value]) => [cborText(key), value])]);
+  return concat([
+    new Uint8Array([0xa0 | entries.length]),
+    ...entries.flatMap(([key, value]) => [cborText(key), value]),
+  ]);
 }
 
 function cborArray(items: Uint8Array[]): Uint8Array {
@@ -78,7 +89,9 @@ const claimBox = superbox('c2pa.claim.v2', CLAIM, [box('cbor', claim)]);
 describe('C2PA manifests', () => {
   it('finds a C2PA 2.x manifest labelled urn:c2pa:<uuid>', () => {
     const manifest = superbox('urn:c2pa:3b2b28e8-480a-4dc1-89ea-966b400e0eed', MANIFEST, [
-      superbox('c2pa.assertions', ASSERTIONS, [superbox('c2pa.actions.v2', ACTIONS, [box('cbor', actions)])]),
+      superbox('c2pa.assertions', ASSERTIONS, [
+        superbox('c2pa.actions.v2', ACTIONS, [box('cbor', actions)]),
+      ]),
       claimBox,
     ]);
     const store = superbox('c2pa', STORE, [manifest]);

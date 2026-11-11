@@ -43,7 +43,11 @@ export function crc32(bytes: Uint8Array, seed = 0): number {
   const whole = bytes.length - (bytes.length % 8);
   let index = 0;
   for (; index < whole; index += 8) {
-    crc ^= bytes[index]! | (bytes[index + 1]! << 8) | (bytes[index + 2]! << 16) | (bytes[index + 3]! << 24);
+    crc ^=
+      bytes[index]! |
+      (bytes[index + 1]! << 8) |
+      (bytes[index + 2]! << 16) |
+      (bytes[index + 3]! << 24);
     crc =
       (t7[crc & 0xff]! ^
         t6[(crc >>> 8) & 0xff]! ^

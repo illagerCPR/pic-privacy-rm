@@ -121,7 +121,8 @@ export function buildJumbfFindings(payloads: readonly Uint8Array[], bytes: numbe
   const candidates: Uint8Array[] = [];
   for (const payload of payloads) {
     candidates.push(payload);
-    if (payload.length > 2 && payload[0] === 0x4a && payload[1] === 0x50) candidates.push(payload.subarray(2));
+    if (payload.length > 2 && payload[0] === 0x4a && payload[1] === 0x50)
+      candidates.push(payload.subarray(2));
     if (payload.length > 4) candidates.push(payload.subarray(4));
   }
   const boxes: JumbfBox[] = [];

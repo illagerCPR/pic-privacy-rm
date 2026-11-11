@@ -3,6 +3,7 @@ import type { MetadataGroup, MetadataItem, MetadataReport } from '../core/metada
 import { useI18n } from '../i18n/index.tsx';
 import type { MessageKey } from '../i18n/zh.ts';
 import { hexDump } from '../lib/hex.ts';
+import { BlobImage } from './BlobImage.tsx';
 
 /** Bytes shown before the viewer is asked to page in more. */
 const HEX_PAGE = 128;
@@ -16,6 +17,17 @@ export interface CompareView {
   report: MetadataReport | null;
   loading: boolean;
   error: string | null;
+  /** The two images themselves, shown above the metadata panes. */
+  preview: {
+    before: Blob;
+    after: Blob | null;
+    /** True when the orientation bake re-encoded the pixels. */
+    reencoded: boolean;
+    /** Set for formats the browser cannot decode (HEIC, TIFF). */
+    notice?: string;
+    /** True when the orientation tag was dropped without baking it into pixels. */
+    orientationLost?: boolean;
+  };
 }
 
 interface Props {
@@ -185,7 +197,10 @@ export function MetadataTable({ report, loading, error, supported, compare }: Pr
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set());
   const needle = query.trim().toLowerCase();
 
-  const groups = useMemo(() => (report ? filterGroups(report.groups, needle) : []), [report, needle]);
+  const groups = useMemo(
+    () => (report ? filterGroups(report.groups, needle) : []),
+    [report, needle],
+  );
   const afterGroups = useMemo(
     () => (compare.report ? filterGroups(compare.report.groups, needle) : []),
     [compare.report, needle],
@@ -243,60 +258,87 @@ export function MetadataTable({ report, loading, error, supported, compare }: Pr
         )}
       </div>
 
-      {needle.length > 0 && matches === 0 && (
-        <p className="meta-state">{t('meta.noMatch')}</p>
-      )}
+      {needle.length > 0 && matches === 0 && <p className="meta-state">{t('meta.noMatch')}</p>}
 
       {compare.on ? (
-        <div className="meta-compare">
-          <section className="meta-pane">
-            <h4 className="meta-pane-head">
-              {t('meta.before')}
-              <span className="meta-pane-count">{countGroups(groups)}</span>
-            </h4>
-            <GroupList
-              groups={groups}
-              collapsed={collapsed}
-              onToggle={(id) => setCollapsed((previous) => toggle(previous, id))}
-              expandAll={needle.length > 0}
-            />
-          </section>
-
-          <section className="meta-pane">
-            <h4 className="meta-pane-head">
-              {t('meta.after')}
-              <span className="meta-pane-count">
-                {compare.loading ? '…' : countGroups(afterGroups)}
-              </span>
-            </h4>
-            {compare.loading && (
-              <p className="meta-state">
-                <span className="spinner" aria-hidden="true" />
-                {t('meta.loading')}
-              </p>
-            )}
-            {!compare.loading && compare.error && (
-              <div className="callout callout--bad">
-                <span>{t('meta.failed')}</span>
-              </div>
-            )}
-            {!compare.loading && !compare.error && (
+        <>
+          <div className="meta-previews">
+            {compare.preview.notice ? (
+              <p className="meta-preview-empty">{compare.preview.notice}</p>
+            ) : (
               <>
-                {afterClean && needle.length === 0 && (
-                  <p className="meta-after-clean">{t('meta.afterClean')}</p>
-                )}
-                {compare.report && (
-                  <GroupList
-                    groups={afterGroups}
-                    collapsed={collapsed}
-                    onToggle={(id) => setCollapsed((previous) => toggle(previous, id))}
-                    expandAll={needle.length > 0}
-                  />
-                )}
+                <figure className="meta-preview">
+                  <BlobImage blob={compare.preview.before} alt={t('meta.before')} />
+                  <figcaption>{t('meta.before')}</figcaption>
+                </figure>
+                <figure className="meta-preview">
+                  {compare.preview.after ? (
+                    <BlobImage blob={compare.preview.after} alt={t('meta.after')} />
+                  ) : null}
+                  <figcaption>{t('meta.after')}</figcaption>
+                </figure>
               </>
             )}
-          </section>
-        </div>
+          </div>
+          <p className="meta-preview-note">
+            {compare.preview.reencoded ? t('meta.reencodedPixels') : t('meta.samePixels')}
+          </p>
+          {compare.preview.orientationLost && (
+            <p className="meta-preview-note meta-preview-note--warn">
+              {t('meta.orientationPreview')}
+            </p>
+          )}
+
+          <div className="meta-compare">
+            <section className="meta-pane">
+              <h4 className="meta-pane-head">
+                {t('meta.before')}
+                <span className="meta-pane-count">{countGroups(groups)}</span>
+              </h4>
+              <GroupList
+                groups={groups}
+                collapsed={collapsed}
+                onToggle={(id) => setCollapsed((previous) => toggle(previous, id))}
+                expandAll={needle.length > 0}
+              />
+            </section>
+
+            <section className="meta-pane">
+              <h4 className="meta-pane-head">
+                {t('meta.after')}
+                <span className="meta-pane-count">
+                  {compare.loading ? '…' : countGroups(afterGroups)}
+                </span>
+              </h4>
+              {compare.loading && (
+                <p className="meta-state">
+                  <span className="spinner" aria-hidden="true" />
+                  {t('meta.loading')}
+                </p>
+              )}
+              {!compare.loading && compare.error && (
+                <div className="callout callout--bad">
+                  <span>{t('meta.failed')}</span>
+                </div>
+              )}
+              {!compare.loading && !compare.error && (
+                <>
+                  {afterClean && needle.length === 0 && (
+                    <p className="meta-after-clean">{t('meta.afterClean')}</p>
+                  )}
+                  {compare.report && (
+                    <GroupList
+                      groups={afterGroups}
+                      collapsed={collapsed}
+                      onToggle={(id) => setCollapsed((previous) => toggle(previous, id))}
+                      expandAll={needle.length > 0}
+                    />
+                  )}
+                </>
+              )}
+            </section>
+          </div>
+        </>
       ) : (
         <GroupList
           groups={groups}

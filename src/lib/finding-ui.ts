@@ -34,30 +34,6 @@ export function badgesFor(findings: Finding[]): BadgeSpec[] {
   return out.sort((a, b) => a.order - b.order);
 }
 
-export type FindingIcon =
-  | 'gps'
-  | 'camera'
-  | 'image'
-  | 'clock'
-  | 'user'
-  | 'shield'
-  | 'layers'
-  | 'alert'
-  | 'info'
-  | 'file';
-
-export function iconForFinding(finding: Finding): FindingIcon {
-  if (finding.category === 'gps') return 'gps';
-  if (finding.category === 'exif') return 'camera';
-  if (finding.category === 'thumbnail') return 'image';
-  if (finding.category === 'c2pa') return 'shield';
-  if (finding.category === 'xmp' || finding.category === 'iptc') return 'layers';
-  if (finding.category === 'orientation') return 'info';
-  if (finding.category === 'trailer' || finding.category === 'mpf') return 'file';
-  if (finding.severity === 'high') return 'alert';
-  return 'info';
-}
-
 /** Format a JS date range for certificate validity display. */
 export function validityText(from?: string, to?: string): string {
   if (!from && !to) return '';

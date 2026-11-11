@@ -1,38 +1,33 @@
-import { useEffect } from 'react';
+import { useModal } from '../hooks/useModal.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { CheckIcon, LockIcon, ShieldIcon, SparkIcon, XIcon } from './Icons.tsx';
 
 export function PrivacyModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { t } = useI18n();
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    window.addEventListener('keydown', onKey);
-    return () => {
-      document.body.style.overflow = previous;
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [open, onClose]);
+  const modal = useModal<HTMLDivElement>(open, onClose);
 
   if (!open) return null;
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
       <div
+        ref={modal.ref}
         className="modal"
         role="dialog"
         aria-modal="true"
         aria-label={t('modal.title')}
+        tabIndex={-1}
+        onKeyDown={modal.onKeyDown}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="modal-head">
           <h2>{t('modal.title')}</h2>
-          <button type="button" className="icon-btn" onClick={onClose} aria-label={t('actions.close')}>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={onClose}
+            aria-label={t('actions.close')}
+          >
             <XIcon size={18} />
           </button>
         </div>

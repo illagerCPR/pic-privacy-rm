@@ -8,7 +8,12 @@ function rational(tag: number, nums: number[]): TiffTag {
 }
 
 function textTag(tag: number, text: string): TiffTag {
-  return { tag, type: 2, count: text.length + 1, value: { type: 2, count: text.length + 1, nums: [], text } };
+  return {
+    tag,
+    type: 2,
+    count: text.length + 1,
+    value: { type: 2, count: text.length + 1, nums: [], text },
+  };
 }
 
 function gpsIfd(tags: TiffTag[]): TiffIfd {

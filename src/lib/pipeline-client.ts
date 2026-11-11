@@ -79,7 +79,9 @@ export function createPipelineClient(): PipelineClient {
         window.clearTimeout(entry.timer);
         if (!data.ok) {
           entry.reject(
-            data.error ? new PipelineError(data.error.code, data.error.params) : new PipelineError('strip-failed'),
+            data.error
+              ? new PipelineError(data.error.code, data.error.params)
+              : new PipelineError('strip-failed'),
           );
           return;
         }
@@ -148,15 +150,16 @@ export function createPipelineClient(): PipelineClient {
       return request<ScanResult>({ kind: 'scan', file }, () => scanFile(file));
     },
     strip(file, options) {
-      return request<StripOutcome>({ kind: 'strip', file, options }, () => stripFile(file, options));
+      return request<StripOutcome>({ kind: 'strip', file, options }, () =>
+        stripFile(file, options),
+      );
     },
     verify(blob) {
       return request<VerifyResult>({ kind: 'verify', blob }, () => verifyBlob(blob));
     },
     inspect(blob, options) {
-      return request<MetadataReport>(
-        { kind: 'inspect', blob, keepIcc: options.keepIcc },
-        () => inspectBlob(blob, options),
+      return request<MetadataReport>({ kind: 'inspect', blob, keepIcc: options.keepIcc }, () =>
+        inspectBlob(blob, options),
       );
     },
     dispose() {

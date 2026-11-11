@@ -185,9 +185,10 @@ export function parseTiff(data: Uint8Array): TiffResult | null {
       if (view.length === 0) continue;
       tags.push({ tag, type, count: items, value: decodeTiffValue(type, items, view, little) });
     }
-    const nextOffset = offset + 2 + count * 12 + 4 <= data.length
-      ? readU32(data, offset + 2 + count * 12, little)
-      : 0;
+    const nextOffset =
+      offset + 2 + count * 12 + 4 <= data.length
+        ? readU32(data, offset + 2 + count * 12, little)
+        : 0;
     ifds.push({ kind, offset, tags, next: nextOffset });
     return nextOffset;
   };
@@ -233,7 +234,11 @@ export function getIfd(result: TiffResult, kind: TiffKind): TiffIfd | undefined 
   return result.ifds.find((i) => i.kind === kind);
 }
 
-export function getTagValue(result: TiffResult, kind: TiffKind, tag: number): TiffValue | undefined {
+export function getTagValue(
+  result: TiffResult,
+  kind: TiffKind,
+  tag: number,
+): TiffValue | undefined {
   const ifd = getIfd(result, kind);
   return ifd?.tags.find((t) => t.tag === tag)?.value;
 }
@@ -241,6 +246,8 @@ export function getTagValue(result: TiffResult, kind: TiffKind, tag: number): Ti
 /** Decode an XP* tag (UTF-16LE bytes stored as BYTE array). */
 export function xpString(value: TiffValue | undefined): string | undefined {
   if (!value?.bytes) return undefined;
-  const text = decodeUtf16le(value.bytes).replace(/\u0000+$/g, '').trim();
+  const text = decodeUtf16le(value.bytes)
+    .replace(/\u0000+$/g, '')
+    .trim();
   return text.length > 0 ? text : undefined;
 }

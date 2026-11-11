@@ -17,6 +17,8 @@ import type { MessageKey } from '../i18n/zh.ts';
 
 interface Props {
   item: Item;
+  /** A batch owns the queue; per-row actions would race with it. */
+  busy: boolean;
   onDetails: (id: string) => void;
   onStrip: (id: string) => void;
   onDownload: (id: string) => void;
@@ -86,7 +88,14 @@ function StatusPill({ item }: { item: Item }) {
   }
 }
 
-export const FileRow = memo(function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Props) {
+export const FileRow = memo(function FileRow({
+  item,
+  busy,
+  onDetails,
+  onStrip,
+  onDownload,
+  onRemove,
+}: Props) {
   const { t } = useI18n();
   const [thumbBroken, setThumbBroken] = useState(false);
   const badges = item.scan ? badgesFor(item.scan.findings) : [];
@@ -105,7 +114,10 @@ export const FileRow = memo(function FileRow({ item, onDetails, onStrip, onDownl
         : undefined;
 
   return (
-    <li className={`file-row file-row--${item.state}`}>
+    <li
+      className={`file-row file-row--${item.state}`}
+      aria-busy={item.state === 'scanning' || item.state === 'stripping' ? true : undefined}
+    >
       <div className="thumb" title={previewNotice}>
         {!thumbBroken ? (
           <img
@@ -123,7 +135,11 @@ export const FileRow = memo(function FileRow({ item, onDetails, onStrip, onDownl
 
       <div className="file-body">
         <div className="file-line">
-          <span className="file-name" title={item.name}>
+          <span
+            className="file-name"
+            title={item.relPath ? `${item.relPath}/${item.name}` : item.name}
+          >
+            {item.relPath && <span className="file-dir">{item.relPath}/</span>}
             {item.name}
           </span>
           <span className="file-size">
@@ -145,7 +161,11 @@ export const FileRow = memo(function FileRow({ item, onDetails, onStrip, onDownl
             </span>
           ))}
           {hiddenBadges.length > 0 && (
-            <span className="badge" data-tone="low" title={hiddenBadges.map((b) => t(b.key)).join(' · ')}>
+            <span
+              className="badge"
+              data-tone="low"
+              title={hiddenBadges.map((b) => t(b.key)).join(' · ')}
+            >
               {t('badge.more', { n: hiddenBadges.length })}
             </span>
           )}
@@ -184,7 +204,7 @@ export const FileRow = memo(function FileRow({ item, onDetails, onStrip, onDownl
             type="button"
             className="btn btn--subtle btn--sm"
             onClick={() => onStrip(item.id)}
-            disabled={item.state === 'stripping'}
+            disabled={busy}
           >
             {item.state === 'failed' ? <RefreshIcon size={15} /> : <SparkIcon size={15} />}
             {item.state === 'failed' ? t('actions.retry') : t('actions.strip')}
@@ -195,6 +215,7 @@ export const FileRow = memo(function FileRow({ item, onDetails, onStrip, onDownl
             type="button"
             className="btn btn--subtle btn--sm"
             onClick={() => onDownload(item.id)}
+            disabled={busy}
             aria-label={`${t('a11y.download')}: ${item.name}`}
           >
             <DownloadIcon size={15} />

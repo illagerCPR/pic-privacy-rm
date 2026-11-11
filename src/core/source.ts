@@ -25,13 +25,3 @@ export async function readAt(src: Source, offset: number, length: number): Promi
   const buf = await src.blob.slice(start, end).arrayBuffer();
   return new Uint8Array(buf);
 }
-
-/** Read at most `max` bytes from `offset` (for bounded metadata payloads). */
-export async function readCapped(
-  src: Source,
-  offset: number,
-  length: number,
-  max: number,
-): Promise<Uint8Array> {
-  return readAt(src, offset, Math.min(length, max));
-}

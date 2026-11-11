@@ -39,14 +39,7 @@ export type Category =
   | 'structure'
   | 'unknown';
 
-export type FieldGroup =
-  | 'device'
-  | 'time'
-  | 'author'
-  | 'gps'
-  | 'capture'
-  | 'software'
-  | 'other';
+export type FieldGroup = 'device' | 'time' | 'author' | 'gps' | 'capture' | 'software' | 'other';
 
 /** A single labelled value shown in the details panel. */
 export interface Field {
@@ -167,8 +160,7 @@ export interface VerifyResult {
 
 /** A slice of the source (copied as-is) or freshly minted bytes. */
 export type Part =
-  | { kind: 'slice'; start: number; end: number }
-  | { kind: 'bytes'; bytes: Uint8Array };
+  { kind: 'slice'; start: number; end: number } | { kind: 'bytes'; bytes: Uint8Array };
 
 /** Result of one container analysis pass; `parts` only exists for stripping. */
 export interface ContainerAnalysis {

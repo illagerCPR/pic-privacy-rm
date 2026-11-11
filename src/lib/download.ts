@@ -12,9 +12,17 @@ export function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(url), 300_000);
 }
 
-export function archiveName(date = new Date()): string {
+function stamp(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `picprivacy-${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(
     date.getHours(),
-  )}${pad(date.getMinutes())}.zip`;
+  )}${pad(date.getMinutes())}`;
+}
+
+export function archiveName(date = new Date()): string {
+  return `picprivacy-${stamp(date)}.zip`;
+}
+
+export function summaryName(date = new Date()): string {
+  return `picprivacy-summary-${stamp(date)}.csv`;
 }

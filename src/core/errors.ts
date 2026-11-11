@@ -20,11 +20,7 @@ export class PipelineError extends Error {
   readonly code: PipelineErrorCode;
   readonly params?: Record<string, string | number>;
 
-  constructor(
-    code: PipelineErrorCode,
-    params?: Record<string, string | number>,
-    message?: string,
-  ) {
+  constructor(code: PipelineErrorCode, params?: Record<string, string | number>, message?: string) {
     super(message ?? code);
     this.name = 'PipelineError';
     this.code = code;

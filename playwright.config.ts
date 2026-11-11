@@ -25,7 +25,8 @@ export default defineConfig({
     },
     {
       // The offline test needs the production build (service worker + CSP).
-      command: 'pnpm build && pnpm preview --port 5190 --strictPort',
+      // Dev owns 5188, preview owns 5190; `pnpm preview` defaults to the latter.
+      command: 'pnpm build && pnpm preview --strictPort',
       url: 'http://127.0.0.1:5190',
       reuseExistingServer: true,
       timeout: 120_000,

@@ -1,13 +1,6 @@
 /** Tiny CBOR decoder — just enough to read C2PA claims and COSE headers. */
 
-export type CborValue =
-  | number
-  | string
-  | boolean
-  | null
-  | Uint8Array
-  | CborValue[]
-  | CborMap;
+export type CborValue = number | string | boolean | null | Uint8Array | CborValue[] | CborMap;
 
 export interface CborMap {
   [key: string]: CborValue;
@@ -83,7 +76,8 @@ class Reader {
           const readPair = () => {
             const k = this.decode();
             const v = this.decode();
-            const key = typeof k === 'string' ? k : typeof k === 'number' ? String(k) : JSON.stringify(k);
+            const key =
+              typeof k === 'string' ? k : typeof k === 'number' ? String(k) : JSON.stringify(k);
             out[key] = v;
           };
           if (info === 31) {
@@ -163,7 +157,10 @@ export function decodeCbor(bytes: Uint8Array): CborValue {
 }
 
 export function asMap(value: CborValue): CborMap | null {
-  return value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Uint8Array)
+  return value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    !(value instanceof Uint8Array)
     ? (value as CborMap)
     : null;
 }

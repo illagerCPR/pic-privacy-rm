@@ -34,6 +34,12 @@ describe('orientation baking', () => {
       mime: 'image/png',
       ext: 'png',
     }));
-    expect(outcome).toMatchObject({ blob: baked, mime: 'image/png', ext: 'png', reencoded: true, failed: false });
+    expect(outcome).toMatchObject({
+      blob: baked,
+      mime: 'image/png',
+      ext: 'png',
+      reencoded: true,
+      failed: false,
+    });
   });
 });

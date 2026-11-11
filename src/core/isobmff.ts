@@ -56,7 +56,12 @@ export function readBoxes(bytes: Uint8Array, start: number, end: number): Box[] 
   return out;
 }
 
-export function findBox(bytes: Uint8Array, start: number, end: number, type: string): Box | undefined {
+export function findBox(
+  bytes: Uint8Array,
+  start: number,
+  end: number,
+  type: string,
+): Box | undefined {
   return readBoxes(bytes, start, end).find((box) => box.type === type);
 }
 
@@ -68,7 +73,10 @@ export interface FullBoxHeader {
 export function fullBoxHeader(bytes: Uint8Array, box: Box): FullBoxHeader {
   return {
     version: bytes[box.body] ?? 0,
-    flags: ((bytes[box.body + 1] ?? 0) << 16) | ((bytes[box.body + 2] ?? 0) << 8) | (bytes[box.body + 3] ?? 0),
+    flags:
+      ((bytes[box.body + 1] ?? 0) << 16) |
+      ((bytes[box.body + 2] ?? 0) << 8) |
+      (bytes[box.body + 3] ?? 0),
   };
 }
 
@@ -344,7 +352,10 @@ export function readPropertyAssociations(bytes: Uint8Array, box: Box): IpmaTable
       const value = readUInt(bytes, pos, size);
       pos += size;
       const essentialBit = wideIndex ? 0x8000 : 0x80;
-      associations.push({ index: value & (essentialBit - 1), essential: (value & essentialBit) !== 0 });
+      associations.push({
+        index: value & (essentialBit - 1),
+        essential: (value & essentialBit) !== 0,
+      });
     }
     if (pos > box.end) break;
     items.push({ id, associations });

@@ -51,9 +51,17 @@ export default defineConfig({
     reportCompressedSize: false,
   },
   server: { port: 5188, strictPort: true },
-  preview: { port: 5188, strictPort: true },
+  // Dev and preview must not fight for one port: e2e drives both at once.
+  preview: { port: 5190, strictPort: true },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.{ts,tsx}'],
+      // Entry point and the worker shim are exercised through the browser only.
+      exclude: ['src/main.tsx', 'src/workers/**'],
+      reporter: ['text', 'html'],
+    },
   },
 });

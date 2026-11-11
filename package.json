@@ -1,7 +1,7 @@
 {
   "name": "pic-privacy-rm",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Strip EXIF, XMP, GPS and C2PA metadata from images, entirely in your browser.",
   "license": "MIT",
@@ -16,21 +16,33 @@
     "fixtures": "python3 tools/make_fixtures.py",
     "verify": "python3 tools/verify.py",
     "real": "python3 tools/fetch_real.py",
-    "check": "pnpm typecheck && pnpm test && pnpm build && node tools/check_offline.mjs",
+    "check": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm build && node tools/check_offline.mjs",
     "test:e2e": "playwright test",
-    "check:e2e": "pnpm exec playwright test"
+    "check:e2e": "pnpm exec playwright test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.64.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "@vitest/coverage-v8": "3.2.7",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "prettier": "^3.9.10",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.2",
     "vite": "^7.3.7",
     "vitest": "^3.2.7"
   },

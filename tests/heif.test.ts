@@ -16,7 +16,8 @@ import { sourceFromBytes } from '../src/core/source.ts';
  * ------------------------------------------------------------------ */
 
 const IMAGE_BYTES = new Uint8Array(Array.from({ length: 64 }, (_, i) => i % 251));
-const XMP_TEXT = '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>tester</dc:creator></rdf:Description></rdf:RDF></x:xmpmeta>';
+const XMP_TEXT =
+  '<?xpacket begin="" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>tester</dc:creator></rdf:Description></rdf:RDF></x:xmpmeta>';
 
 function u16(value: number): Uint8Array {
   const out = new Uint8Array(2);
@@ -123,9 +124,19 @@ function buildHeif(layout: Layout = {}): Built {
   const isAvif = brand === 'avif' || brand === 'mif1-avif';
   const imageType = isAvif ? 'av01' : 'hvc1';
   const items: { id: number; info: Uint8Array; payload: Uint8Array; inIdat: boolean }[] = [
-    { id: 1, info: infe(1, imageType, ''), payload: image, inIdat: layout.idatItems?.has(1) ?? false },
+    {
+      id: 1,
+      info: infe(1, imageType, ''),
+      payload: image,
+      inIdat: layout.idatItems?.has(1) ?? false,
+    },
     { id: 2, info: infe(2, 'Exif', ''), payload: exif, inIdat: layout.idatItems?.has(2) ?? false },
-    { id: 3, info: infe(3, 'mime', 'xmp', 'application/rdf+xml'), payload: xmp, inIdat: layout.idatItems?.has(3) ?? false },
+    {
+      id: 3,
+      info: infe(3, 'mime', 'xmp', 'application/rdf+xml'),
+      payload: xmp,
+      inIdat: layout.idatItems?.has(3) ?? false,
+    },
     ...(layout.extraItems ?? []).map((extra) => ({
       id: extra.id,
       info: extra.info,
@@ -138,7 +149,12 @@ function buildHeif(layout: Layout = {}): Built {
   const baseOffsetSize = layout.baseOffsetSize ?? 0;
 
   const ilocPayload = (
-    entries: { id: number; method: number; base: number; extents: { offset: number; length: number }[] }[],
+    entries: {
+      id: number;
+      method: number;
+      base: number;
+      extents: { offset: number; length: number }[];
+    }[],
   ): Uint8Array => {
     const sizes = new Uint8Array([(4 << 4) | 4, (baseOffsetSize << 4) | 0]);
     const count = ilocVersion < 2 ? u16(entries.length) : u32(entries.length);
@@ -190,9 +206,10 @@ function buildHeif(layout: Layout = {}): Built {
       : brand === 'mif1-avif'
         ? box('ftyp', ascii('mif1'), u32(0), ascii('mif1'), ascii('miaf'), ascii('avif'))
         : box('ftyp', ascii('heic'), u32(0), ascii('mif1'), ascii('heic'));
-  const idatPayload = items.filter((item) => item.inIdat).length > 0
-    ? concat(items.filter((item) => item.inIdat).map((item) => item.payload))
-    : null;
+  const idatPayload =
+    items.filter((item) => item.inIdat).length > 0
+      ? concat(items.filter((item) => item.inIdat).map((item) => item.payload))
+      : null;
   const idatOffsets = new Map<number, number>();
   {
     let cursor = 0;
@@ -245,7 +262,9 @@ describe('heif detection', () => {
     const ids = result.findings.map((finding) => finding.id);
     expect(ids).toContain('finding.exif');
     expect(ids).toContain('finding.xmp');
-    expect(result.findings.find((f) => f.id === 'finding.exif')?.fields?.[0]?.value).toContain('TestCam');
+    expect(result.findings.find((f) => f.id === 'finding.exif')?.fields?.[0]?.value).toContain(
+      'TestCam',
+    );
   });
 
   it('counts the metadata payload as dropped', async () => {

@@ -11,17 +11,3 @@ export function formatBytes(bytes: number): string {
   const rounded = value < 10 ? value.toFixed(1) : Math.round(value).toString();
   return `${rounded} ${units[unit]}`;
 }
-
-export function formatPercent(value: number): string {
-  return `${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`;
-}
-
-export function formatDate(iso?: string): string {
-  if (!iso) return '';
-  const parsed = new Date(iso);
-  if (Number.isNaN(parsed.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${parsed.getFullYear()}-${pad(parsed.getMonth() + 1)}-${pad(parsed.getDate())} ${pad(
-    parsed.getHours(),
-  )}:${pad(parsed.getMinutes())}`;
-}

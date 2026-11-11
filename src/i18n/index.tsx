@@ -1,4 +1,12 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react';
 import { en } from './en.ts';
 import { zh, type Dict, type MessageKey } from './zh.ts';
 
@@ -72,10 +80,6 @@ export function useI18n(): I18nValue {
   const value = useContext(I18nContext);
   if (!value) throw new Error('useI18n outside I18nProvider');
   return value;
-}
-
-export function useT(): Translate {
-  return useI18n().t;
 }
 
 export type { MessageKey };

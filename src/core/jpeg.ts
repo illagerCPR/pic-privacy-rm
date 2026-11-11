@@ -8,10 +8,22 @@
  */
 import { decodeText, startsWithBytes, u16be } from './bytes.ts';
 import { summarizeExifBlock } from './exif.ts';
-import { buildExifFindings, buildIptcFindings, buildJumbfFindings, buildXmpFindings } from './findings.ts';
+import {
+  buildExifFindings,
+  buildIptcFindings,
+  buildJumbfFindings,
+  buildXmpFindings,
+} from './findings.ts';
 import { parsePhotoshopApp13 } from './iptc.ts';
 import { readAt, type Source } from './source.ts';
-import type { BlockInfo, ContainerAnalysis, Finding, Part, StripOptions, Warning } from './types.ts';
+import type {
+  BlockInfo,
+  ContainerAnalysis,
+  Finding,
+  Part,
+  StripOptions,
+  Warning,
+} from './types.ts';
 import { parseXmp } from './xmp.ts';
 
 const SCAN_CHUNK = 1 << 20;
@@ -205,20 +217,43 @@ export async function analyzeJpeg(src: Source, opts: StripOptions): Promise<Cont
         break;
       }
       parts.push({ kind: 'slice', start: markerStart, end: scanEnd });
-      collected.blocks.push({ name: 'SOS', bytes: scanEnd - markerStart, kept: true, note: 'scan data' });
+      collected.blocks.push({
+        name: 'SOS',
+        bytes: scanEnd - markerStart,
+        kept: true,
+        note: 'scan data',
+      });
       pos = scanEnd;
       continue;
     }
 
     if (isSof(marker)) sawSof = true;
 
-    const verdict = await classifySegment(src, marker, payloadStart, payloadLength, opts, collected, jumbfParts);
+    const verdict = await classifySegment(
+      src,
+      marker,
+      payloadStart,
+      payloadLength,
+      opts,
+      collected,
+      jumbfParts,
+    );
     if (verdict.keep) {
       parts.push({ kind: 'slice', start: markerStart, end: payloadEnd });
-      collected.blocks.push({ name: verdict.name, bytes: payloadEnd - markerStart, kept: true, note: verdict.note });
+      collected.blocks.push({
+        name: verdict.name,
+        bytes: payloadEnd - markerStart,
+        kept: true,
+        note: verdict.note,
+      });
     } else {
       collected.droppedBytes += payloadEnd - markerStart;
-      collected.blocks.push({ name: verdict.name, bytes: payloadEnd - markerStart, kept: false, note: verdict.note });
+      collected.blocks.push({
+        name: verdict.name,
+        bytes: payloadEnd - markerStart,
+        kept: false,
+        note: verdict.note,
+      });
       if (verdict.unknownApp) {
         unknownApps += 1;
         unknownBytes += payloadEnd - markerStart;
@@ -293,9 +328,10 @@ async function classifySegment(
   jumbfParts: Uint8Array[],
 ): Promise<SegmentVerdict> {
   const needsPayload = marker >= 0xe0 && marker <= 0xef ? true : marker === 0xfe;
-  const payload = needsPayload && payloadLength > 0
-    ? await readAt(src, payloadStart, payloadLength)
-    : new Uint8Array(0);
+  const payload =
+    needsPayload && payloadLength > 0
+      ? await readAt(src, payloadStart, payloadLength)
+      : new Uint8Array(0);
   const name = MARKER_NAMES[marker] ?? `0x${marker.toString(16).padStart(2, '0')}`;
 
   switch (marker) {
@@ -371,11 +407,14 @@ async function classifySegment(
       return { keep: false, name: 'APP13', unknownApp: true };
     }
     case 0xee: {
-      if (startsWithBytes(payload, 0, 'Adobe')) return { keep: true, name: 'APP14 Adobe', note: 'colour transform' };
+      if (startsWithBytes(payload, 0, 'Adobe'))
+        return { keep: true, name: 'APP14 Adobe', note: 'colour transform' };
       return { keep: false, name: 'APP14' };
     }
     case 0xfe: {
-      const text = decodeText(payload.subarray(0, Math.min(payload.length, 200))).replace(/\u0000/g, '').trim();
+      const text = decodeText(payload.subarray(0, Math.min(payload.length, 200)))
+        .replace(/\u0000/g, '')
+        .trim();
       collected.findings.push({
         id: 'finding.comment',
         category: 'comment',

@@ -7,20 +7,26 @@ import { bakeIfNeeded } from '../lib/bake.ts';
 import { isPipelineError } from '../core/errors.ts';
 import { createToken, runBatch, type BatchToken } from '../lib/batch.ts';
 import { archiveName, downloadBlob } from '../lib/download.ts';
-import { buildZip, ZipError, type ZipEntry } from '../lib/zip.ts';
-import { batchReportName, buildBatchReport, buildReport, reportFileName, type ReportInput } from '../lib/report.ts';
-import { looksLikeImage, outputName, sortFilesByName, uniqueName } from '../lib/files.ts';
+import { buildZip, type ZipEntry } from '../lib/zip.ts';
+import {
+  batchReportName,
+  buildBatchReport,
+  buildReport,
+  reportFileName,
+  type ReportInput,
+} from '../lib/report.ts';
+import {
+  looksLikeImage,
+  outputName,
+  safeArchivePath,
+  sortIncoming,
+  uniqueName,
+  type IncomingFile,
+} from '../lib/files.ts';
 import { createLimiter } from '../lib/queue.ts';
 
 export type ItemState =
-  | 'scanning'
-  | 'ready'
-  | 'clean'
-  | 'unsupported'
-  | 'error'
-  | 'stripping'
-  | 'done'
-  | 'failed';
+  'scanning' | 'ready' | 'clean' | 'unsupported' | 'error' | 'stripping' | 'done' | 'failed';
 
 export interface ItemResult {
   blob: Blob;
@@ -38,6 +44,8 @@ export interface Item {
   id: string;
   file: File;
   name: string;
+  /** Folder inside the drop, kept so the archive mirrors what was handed in. */
+  relPath?: string;
   size: number;
   previewUrl: string;
   state: ItemState;
@@ -130,7 +138,7 @@ function errorKey(error: unknown): string {
 
 export interface Workspace {
   items: Item[];
-  addFiles: (files: File[]) => void;
+  addFiles: (files: IncomingFile[]) => void;
   removeItem: (id: string) => void;
   clear: () => void;
   stripItem: (id: string) => Promise<void>;
@@ -256,20 +264,21 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   );
 
   const addFiles = useCallback(
-    (files: File[]) => {
-      const accepted = files.filter(isImageLike);
+    (files: IncomingFile[]) => {
+      const accepted = files.filter((entry) => isImageLike(entry.file));
       const skipped = files.length - accepted.length;
       if (accepted.length === 0) {
         if (skipped > 0) notify('toast.skipped', { n: skipped });
         return;
       }
-      const sorted = sortFilesByName(accepted);
-      const created: Item[] = sorted.map((file) => ({
+      const sorted = sortIncoming(accepted);
+      const created: Item[] = sorted.map((entry) => ({
         id: makeId(),
-        file,
-        name: file.name,
-        size: file.size,
-        previewUrl: URL.createObjectURL(file),
+        file: entry.file,
+        name: entry.file.name,
+        relPath: entry.dir === '' ? undefined : entry.dir,
+        size: entry.file.size,
+        previewUrl: URL.createObjectURL(entry.file),
         state: 'scanning',
       }));
       updateItems((prev) => [...prev, ...created]);
@@ -449,7 +458,9 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     // user to discover a sideways photo in their gallery.
     const sideways = targets.filter((target) => {
       const item = itemsRef.current.find((entry) => entry.id === target.id);
-      return item?.state === 'done' && !settingsRef.current.bake && (item.scan?.orientation ?? 1) > 1;
+      return (
+        item?.state === 'done' && !settingsRef.current.bake && (item.scan?.orientation ?? 1) > 1
+      );
     }).length;
     if (sideways > 0) notify('toast.orientationLost', { n: sideways });
   }, [notify, stripOne]);
@@ -471,7 +482,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     const scan = item.scan;
     return {
       blob: item.file,
-      filename: outputName(item.name, scan?.format === 'jpeg' ? 'jpg' : scan?.format ?? 'bin'),
+      filename: outputName(item.name, scan?.format === 'jpeg' ? 'jpg' : (scan?.format ?? 'bin')),
       size: item.file.size,
       removed: [],
       removedBytes: 0,
@@ -514,7 +525,11 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
       if (!item) return;
       const source = downloadableState(item);
       const result =
-        source === 'result' ? item.result : source === 'passthrough' ? passthroughResult(item) : undefined;
+        source === 'result'
+          ? item.result
+          : source === 'passthrough'
+            ? passthroughResult(item)
+            : undefined;
       if (!result) return;
       downloadBlob(result.blob, result.filename);
     },
@@ -528,9 +543,18 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     for (const item of itemsRef.current) {
       const source = downloadableState(item);
       const result =
-        source === 'result' ? item.result : source === 'passthrough' ? passthroughResult(item) : undefined;
+        source === 'result'
+          ? item.result
+          : source === 'passthrough'
+            ? passthroughResult(item)
+            : undefined;
       if (!result) continue;
-      ready.push({ name: uniqueName(result.filename, taken), blob: result.blob });
+      // The folder the photo came from is part of its identity: a shoot dumped
+      // into one flat pile loses the selection and shooting order.
+      ready.push({
+        name: uniqueName(safeArchivePath(item.relPath ?? '', result.filename), taken),
+        blob: result.blob,
+      });
     }
     if (ready.length === 0) {
       notify('error.noFiles');
@@ -539,12 +563,13 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     jobRef.current = true;
     setJob({ kind: 'zip', done: 0, total: ready.length });
     try {
-      const archive = await buildZip(ready, (tick) => setJob({ kind: 'zip', done: tick.done, total: tick.total }));
+      const archive = await buildZip(ready, (tick) =>
+        setJob({ kind: 'zip', done: tick.done, total: tick.total }),
+      );
       downloadBlob(archive, archiveName());
       notify('toast.zipDone');
-    } catch (error) {
-      const tooLarge = error instanceof ZipError && error.code === 'archive-too-large';
-      notify(tooLarge ? 'error.zipTooLarge' : 'error.zipFailed');
+    } catch {
+      notify('error.zipFailed');
     } finally {
       jobRef.current = false;
       setJob(null);

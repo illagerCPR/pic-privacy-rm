@@ -10,10 +10,9 @@ const here = fileURLToPath(new URL('.', import.meta.url));
 const fixtures = join(here, 'fixtures');
 const output = join(here, 'output');
 
-const expectations = JSON.parse(readFileSync(join(fixtures, 'expectations.json'), 'utf8')) as Record<
-  string,
-  { format: string; findings: string[] }
->;
+const expectations = JSON.parse(
+  readFileSync(join(fixtures, 'expectations.json'), 'utf8'),
+) as Record<string, { format: string; findings: string[] }>;
 
 function fixture(name: string): Uint8Array {
   return new Uint8Array(readFileSync(join(fixtures, name)));
@@ -124,7 +123,9 @@ describe('detection', () => {
     expect(heic.supported).toBe(true);
     expect(heic.warnings.some((warning) => warning.severity === 'error')).toBe(true);
     expect(heic.droppedBytes).toBe(0);
-    await expect(stripSource(sourceFromBytes(fixture('fake.heic')))).rejects.toThrow(/unreadable|unsupported/);
+    await expect(stripSource(sourceFromBytes(fixture('fake.heic')))).rejects.toThrow(
+      /unreadable|unsupported/,
+    );
   });
 });
 
@@ -142,7 +143,9 @@ describe('stripping', () => {
       expect(bytes.length).toBeGreaterThan(0);
 
       const verify = await verifyBlob(result.blob, result.format);
-      expect(verify.ok, `${name} leftovers: ${verify.leftovers.map((f) => f.id).join(',')}`).toBe(true);
+      expect(verify.ok, `${name} leftovers: ${verify.leftovers.map((f) => f.id).join(',')}`).toBe(
+        true,
+      );
       expect(verify.leftovers).toEqual([]);
 
       const rescan = await scanSource(sourceFromBytes(bytes));
@@ -194,26 +197,34 @@ describe('stripping', () => {
   });
 
   it('verifies a trailer the user chose to keep', async () => {
-    const file = new File([Uint8Array.from(fixture('meta.jpg'))], 'meta.jpg', { type: 'image/jpeg' });
+    const file = new File([Uint8Array.from(fixture('meta.jpg'))], 'meta.jpg', {
+      type: 'image/jpeg',
+    });
     const outcome = await stripFile(file, { ...DEFAULT_STRIP_OPTIONS, truncateTrailer: false });
     expect(outcome.verify.ok).toBe(true);
     expect(outcome.verify.leftovers).toEqual([]);
   });
 
   it('refuses truncated input rather than emitting broken files', async () => {
-    await expect(stripSource(sourceFromBytes(fixture('broken.jpg')), DEFAULT_STRIP_OPTIONS)).rejects.toMatchObject({
+    await expect(
+      stripSource(sourceFromBytes(fixture('broken.jpg')), DEFAULT_STRIP_OPTIONS),
+    ).rejects.toMatchObject({
       code: 'unreadable',
     });
   });
 
   it('refuses a file whose format it cannot identify', async () => {
-    await expect(stripSource(sourceFromBytes(fixture('note.txt')), DEFAULT_STRIP_OPTIONS)).rejects.toMatchObject({
+    await expect(
+      stripSource(sourceFromBytes(fixture('note.txt')), DEFAULT_STRIP_OPTIONS),
+    ).rejects.toMatchObject({
       code: 'unsupported-format',
     });
   });
 
   it('reports a malformed container as unreadable', async () => {
-    await expect(stripSource(sourceFromBytes(fixture('fake.heic')), DEFAULT_STRIP_OPTIONS)).rejects.toMatchObject({
+    await expect(
+      stripSource(sourceFromBytes(fixture('fake.heic')), DEFAULT_STRIP_OPTIONS),
+    ).rejects.toMatchObject({
       code: 'unreadable',
     });
   });

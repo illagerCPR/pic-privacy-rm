@@ -65,7 +65,13 @@ const AUTHOR_PREFIXES = new Set(['dc', 'photoshop', 'Iptc4xmpCore', 'Iptc4xmpExt
 function groupFor(prefix: string, name: string): FieldGroup {
   if (GPS_PREFIXES.has(prefix) || /^(GPS|GPano)/.test(name)) return 'gps';
   if (AUTHOR_PREFIXES.has(prefix)) return 'author';
-  if (prefix === 'xmp' || prefix === 'xmpMM' || prefix === 'crs' || prefix === 'stEvt' || prefix === 'lr') {
+  if (
+    prefix === 'xmp' ||
+    prefix === 'xmpMM' ||
+    prefix === 'crs' ||
+    prefix === 'stEvt' ||
+    prefix === 'lr'
+  ) {
     return 'software';
   }
   if (prefix === 'tiff' || prefix === 'aux' || prefix === 'exif') return 'device';
@@ -73,7 +79,10 @@ function groupFor(prefix: string, name: string): FieldGroup {
 }
 
 function stripTags(input: string): string {
-  return input.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return input
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function decodeBase64(value: string): Uint8Array | null {
@@ -191,16 +200,28 @@ export function parseXmp(bytes: Uint8Array, extended = false): XmpSummary {
     }
   }
 
-  const hasGps = properties.some((p) => p.group === 'gps' || /^(GPSLatitude|GPSLongitude|GPSAltitude)$/.test(p.key.split(':')[1] ?? ''));
-  const hasCreator = properties.some((p) => /^(dc:(creator|rights)|photoshop:(Credit|Byline|AuthorsPosition))$/.test(p.key));
-  const hasHistory = properties.some((p) => /^(xmpMM:History|stEvt:|photoshop:History)$/.test(p.key) || p.prefix === 'stEvt');
+  const hasGps = properties.some(
+    (p) =>
+      p.group === 'gps' ||
+      /^(GPSLatitude|GPSLongitude|GPSAltitude)$/.test(p.key.split(':')[1] ?? ''),
+  );
+  const hasCreator = properties.some((p) =>
+    /^(dc:(creator|rights)|photoshop:(Credit|Byline|AuthorsPosition))$/.test(p.key),
+  );
+  const hasHistory = properties.some(
+    (p) => /^(xmpMM:History|stEvt:|photoshop:History)$/.test(p.key) || p.prefix === 'stEvt',
+  );
 
   let thumbnail: XmpSummary['thumbnail'];
   const thumbProp = properties.find((p) => p.key === 'xmpGImg:image');
   if (thumbProp) {
     const raw = decodeBase64(thumbProp.value);
     if (raw && raw.length > 100) {
-      thumbnail = { blob: new Blob([raw.slice()], { type: 'image/jpeg' }), mime: 'image/jpeg', bytes: raw.length };
+      thumbnail = {
+        blob: new Blob([raw.slice()], { type: 'image/jpeg' }),
+        mime: 'image/jpeg',
+        bytes: raw.length,
+      };
     }
   }
 

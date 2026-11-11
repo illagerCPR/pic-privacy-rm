@@ -29,14 +29,25 @@ describe('diagnostic report', () => {
 
     expect(report.schema).toBe(REPORT_SCHEMA);
     expect(report.app.name).toBe('PicPrivacy');
-    expect(report.file).toMatchObject({ name: 'meta.jpg', size: bytes.length, format: 'jpeg', supported: true });
+    expect(report.file).toMatchObject({
+      name: 'meta.jpg',
+      size: bytes.length,
+      format: 'jpeg',
+      supported: true,
+    });
     expect(report.file.sha256).toBe(createHash('sha256').update(bytes).digest('hex'));
     expect(report.settings).toEqual({ truncateTrailer: true, keepIcc: true, bake: false });
   });
 
   it('keeps findings readable but turns every payload into a size', async () => {
     const scan = await scanFile(file);
-    const json = await buildReport({ file, scan, options: DEFAULT_STRIP_OPTIONS, bake: false, redact: false });
+    const json = await buildReport({
+      file,
+      scan,
+      options: DEFAULT_STRIP_OPTIONS,
+      bake: false,
+      redact: false,
+    });
     const report = JSON.parse(json) as any;
 
     expect(report.scan.findings.length).toBe(scan.findings.length);
@@ -121,7 +132,9 @@ describe('diagnostic report', () => {
   });
 
   it('names the batch document after the moment it was built', () => {
-    expect(batchReportName(new Date(2026, 10, 1, 9, 5))).toBe('picprivacy-reports-20261101-0905.json');
+    expect(batchReportName(new Date(2026, 10, 1, 9, 5))).toBe(
+      'picprivacy-reports-20261101-0905.json',
+    );
   });
 
   it('names the file after the original', () => {

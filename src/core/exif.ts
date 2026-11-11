@@ -1,7 +1,14 @@
 /** Turn a parsed TIFF/EXIF block into display fields and findings data. */
 import { describeGps, findGpsIfd, type GpsInfo } from './gps.ts';
 import { tagName } from './tag-names.ts';
-import { getIfd, getTagValue, parseTiff, xpString, type TiffKind, type TiffResult } from './tiff.ts';
+import {
+  getIfd,
+  getTagValue,
+  parseTiff,
+  xpString,
+  type TiffKind,
+  type TiffResult,
+} from './tiff.ts';
 import type { Field, FieldGroup } from './types.ts';
 import { trimNul } from './bytes.ts';
 
@@ -35,16 +42,7 @@ const DEVICE_TAGS = new Set([
 const AUTHOR_TAGS = new Set([0x013b, 0x8298, 0x9c9b, 0x9c9c, 0x9c9d, 0x9c9e, 0x9c9f]);
 
 const TIME_TAGS = new Set([
-  0x0132,
-  0x9003,
-  0x9004,
-  0x9010,
-  0x9011,
-  0x9012,
-  0x9290,
-  0x9291,
-  0x9292,
-  0x9400,
+  0x0132, 0x9003, 0x9004, 0x9010, 0x9011, 0x9012, 0x9290, 0x9291, 0x9292, 0x9400,
 ]);
 
 const SOFTWARE_TAGS = new Set([0x0131]);
@@ -81,7 +79,14 @@ function formatRational(nums: number[], index: number): string {
   return den === 1 ? String(num) : `${num}/${den} (${rounded})`;
 }
 
-function formatTagValue(tag: number, type: number, count: number, nums: number[], text?: string, bytes?: Uint8Array): string {
+function formatTagValue(
+  tag: number,
+  type: number,
+  count: number,
+  nums: number[],
+  text?: string,
+  bytes?: Uint8Array,
+): string {
   if (type === 2) return trimNul(text ?? '');
   if (type === 5 || type === 10) {
     const n = Math.min(count, 4);
@@ -107,7 +112,10 @@ function formatTagValue(tag: number, type: number, count: number, nums: number[]
     if (nums.length > 8) return `${nums.slice(0, 8).join(', ')}, …`;
     return nums.join(', ');
   }
-  if (bytes) return bytes.length <= 8 ? `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}` : `(${bytes.length} bytes)`;
+  if (bytes)
+    return bytes.length <= 8
+      ? `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`
+      : `(${bytes.length} bytes)`;
   return '';
 }
 
@@ -141,7 +149,14 @@ export function summarizeTiff(tiff: TiffResult): ExifSummary {
       if (kind === 'exif' && tag.tag === 0x927c) hasMakerNote = true;
       if (HIDDEN_TAGS.has(tag.tag)) continue;
       const name = tagName(kind === 'ifd0' || kind === 'ifd1' ? 'tiff' : 'exif', tag.tag);
-      const value = formatTagValue(tag.tag, tag.type, tag.count, tag.value.nums, tag.value.text, tag.value.bytes);
+      const value = formatTagValue(
+        tag.tag,
+        tag.type,
+        tag.count,
+        tag.value.nums,
+        tag.value.text,
+        tag.value.bytes,
+      );
       if (!value) continue;
       const field: Field = {
         label: name,
@@ -164,7 +179,7 @@ export function summarizeTiff(tiff: TiffResult): ExifSummary {
   if (ifd1) tagCount += ifd1.tags.length;
 
   const gpsIfd = findGpsIfd(tiff);
-  const gps = gpsIfd ? describeGps(gpsIfd) ?? undefined : undefined;
+  const gps = gpsIfd ? (describeGps(gpsIfd) ?? undefined) : undefined;
 
   if (tiff.thumbnail) {
     const bytes = tiff.thumbnail.bytes;

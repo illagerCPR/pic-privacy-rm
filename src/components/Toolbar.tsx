@@ -1,8 +1,9 @@
+import { useEffect, useRef, useState } from 'react';
 import type { StripOptions } from '../core/types.ts';
 import type { JobProgress } from '../hooks/useWorkspace.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { formatBytes } from '../lib/format.ts';
-import { AlertIcon, DownloadIcon, FileIcon, SparkIcon, TrashIcon } from './Icons.tsx';
+import { AlertIcon, DownloadIcon, FileIcon, SparkIcon, TableIcon, TrashIcon } from './Icons.tsx';
 
 export interface Stats {
   total: number;
@@ -25,6 +26,7 @@ interface Props {
   onStripAll: () => void;
   onDownloadAll: () => void;
   onExportBatchReport: () => void;
+  onExportCsv: () => void;
   canExportBatch: boolean;
   onClear: () => void;
   onCancelBatch: () => void;
@@ -67,6 +69,22 @@ function Toggle(props: {
 export function Toolbar(props: Props) {
   const { t } = useI18n();
   const { stats, progress, job } = props;
+
+  // The progress bars themselves are silent: announcing every tick of a
+  // thousand-file scan turns the screen reader into a slot machine. Only the
+  // transition to "finished" is spoken.
+  const [announcement, setAnnouncement] = useState('');
+  const lastScan = useRef<{ done: number; total: number } | null>(null);
+  useEffect(() => {
+    if (props.scanProgress) {
+      lastScan.current = props.scanProgress;
+      return;
+    }
+    if (!lastScan.current) return;
+    const { total } = lastScan.current;
+    lastScan.current = null;
+    setAnnouncement(t('a11y.scanDone', { n: total }));
+  }, [props.scanProgress, t]);
   const percent = progress && progress.total > 0 ? (progress.done / progress.total) * 100 : 0;
   const scanPercent =
     props.scanProgress && props.scanProgress.total > 0
@@ -85,14 +103,22 @@ export function Toolbar(props: Props) {
             </span>
           )}
           {stats.reclaimable > 0 && (
-            <span className="stats-figure">{t('stats.reclaim', { bytes: formatBytes(stats.reclaimable) })}</span>
+            <span className="stats-figure">
+              {t('stats.reclaim', { bytes: formatBytes(stats.reclaimable) })}
+            </span>
           )}
-          {stats.clean > 0 && <span className="stats-figure">{t('stats.clean', { n: stats.clean })}</span>}
+          {stats.clean > 0 && (
+            <span className="stats-figure">{t('stats.clean', { n: stats.clean })}</span>
+          )}
           {stats.done > 0 && (
-            <span className="stats-figure stats-figure--ok">{t('stats.done', { n: stats.done })}</span>
+            <span className="stats-figure stats-figure--ok">
+              {t('stats.done', { n: stats.done })}
+            </span>
           )}
           {stats.failed > 0 && (
-            <span className="stats-figure stats-figure--bad">{t('stats.failed', { n: stats.failed })}</span>
+            <span className="stats-figure stats-figure--bad">
+              {t('stats.failed', { n: stats.failed })}
+            </span>
           )}
         </div>
         <div className="toolbar-actions">
@@ -123,15 +149,40 @@ export function Toolbar(props: Props) {
             <FileIcon size={16} />
             {t('actions.exportBatchReport')}
           </button>
-          <button type="button" className="btn btn--quiet" onClick={props.onClear} disabled={props.busy}>
+          <button
+            type="button"
+            className="btn btn--ghost"
+            onClick={props.onExportCsv}
+            disabled={!props.canExportBatch || job !== null}
+          >
+            <TableIcon size={16} />
+            {t('actions.exportCsv')}
+          </button>
+          <button
+            type="button"
+            className="btn btn--quiet"
+            onClick={props.onClear}
+            disabled={props.busy}
+          >
             <TrashIcon size={16} />
             {t('actions.clear')}
           </button>
         </div>
       </div>
 
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
+
       {props.scanProgress && (
-        <div className="progress" role="status" aria-live="polite" aria-label={t('a11y.progress')}>
+        <div
+          className="progress"
+          role="progressbar"
+          aria-label={t('a11y.progress')}
+          aria-valuemin={0}
+          aria-valuemax={props.scanProgress.total}
+          aria-valuenow={props.scanProgress.done}
+        >
           <div className="progress-track">
             <div className="progress-bar" style={{ width: `${scanPercent}%` }} />
           </div>
@@ -142,7 +193,14 @@ export function Toolbar(props: Props) {
       )}
 
       {progress && (
-        <div className="progress" role="status" aria-live="polite" aria-label={t('a11y.progress')}>
+        <div
+          className="progress"
+          role="progressbar"
+          aria-label={t('a11y.progress')}
+          aria-valuemin={0}
+          aria-valuemax={progress.total}
+          aria-valuenow={progress.done}
+        >
           <div className="progress-track">
             <div className="progress-bar" style={{ width: `${percent}%` }} />
           </div>
@@ -163,9 +221,11 @@ export function Toolbar(props: Props) {
       {job && (
         <div
           className="progress"
-          role="status"
-          aria-live="polite"
+          role="progressbar"
           aria-label={t(job.kind === 'zip' ? 'a11y.packing' : 'a11y.reporting')}
+          aria-valuemin={0}
+          aria-valuemax={job.total}
+          aria-valuenow={job.done}
         >
           <div className="progress-track">
             <div className="progress-bar" style={{ width: `${jobPercent}%` }} />

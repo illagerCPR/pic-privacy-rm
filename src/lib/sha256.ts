@@ -79,7 +79,8 @@ export class Sha256 {
     for (let index = 0; index < 16; index += 1) {
       const at = offset + index * 4;
       w[index] =
-        ((chunk[at]! << 24) | (chunk[at + 1]! << 16) | (chunk[at + 2]! << 8) | chunk[at + 3]!) >>> 0;
+        ((chunk[at]! << 24) | (chunk[at + 1]! << 16) | (chunk[at + 2]! << 8) | chunk[at + 3]!) >>>
+        0;
     }
     for (let index = 16; index < 64; index += 1) {
       const s0 = rotr(w[index - 15]!, 7) ^ rotr(w[index - 15]!, 18) ^ (w[index - 15]! >>> 3);

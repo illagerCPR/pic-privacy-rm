@@ -25,14 +25,46 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck
-        run: pnpm typecheck
+      # Typecheck, lint, format check, unit tests, build, and the assertion that
+      # the bundle ships no external resources.
+      - name: Check
+        run: pnpm check
 
-      - name: Unit tests
-        run: pnpm test
+      - name: Coverage
+        run: pnpm test:coverage
 
-      - name: Build
-        run: pnpm build
+      - name: Upload the coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 7
 
-      - name: Assert the bundle ships no external resources
-        run: node tools/check_offline.mjs
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The suite drives the Google Chrome that ships with the runner image
+      # (`channel: chrome`), so there is no browser download step.
+      - name: Browser tests
+        run: pnpm test:e2e
+
+      - name: Keep the traces of a failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7

@@ -109,11 +109,12 @@ function fieldsFor(datasets: IptcDataset[]): Field[] {
   return datasets.map((d) => ({
     label: `IPTC ${d.name}`,
     value: d.value,
-    group: /City|Country|Location|Province|Date|Time|Byline|Credit|Copyright|Caption|Headline|Writer|Contact|Source|Keywords|ObjectName/.test(
-      d.name,
-    )
-      ? 'author'
-      : 'other',
+    group:
+      /City|Country|Location|Province|Date|Time|Byline|Credit|Copyright|Caption|Headline|Writer|Contact|Source|Keywords|ObjectName/.test(
+        d.name,
+      )
+        ? 'author'
+        : 'other',
     sensitive: true,
   }));
 }
@@ -129,7 +130,9 @@ export function parseIptcIim(iim: Uint8Array): IptcDataset[] {
     const len = u16be(iim, p + 3);
     const body = iim.subarray(p + 5, Math.min(iim.length, p + 5 + len));
     const key = `${record}:${dataset}`;
-    const text = decodeText(body).replace(/\u0000/g, '').trim();
+    const text = decodeText(body)
+      .replace(/\u0000/g, '')
+      .trim();
     if (text) datasets.push({ key, name: IIM_NAMES[key] ?? key, value: text.slice(0, 400) });
     p += 5 + len;
   }
@@ -144,7 +147,13 @@ export function parsePhotoshopResources(stream: Uint8Array): IptcSummary | null 
 
   while (pos + 12 <= stream.length) {
     const signature = decodeText(stream.subarray(pos, pos + 4));
-    if (signature !== '8BIM' && signature !== 'PHUT' && signature !== 'AgHg' && signature !== 'DCSR') break;
+    if (
+      signature !== '8BIM' &&
+      signature !== 'PHUT' &&
+      signature !== 'AgHg' &&
+      signature !== 'DCSR'
+    )
+      break;
     const id = u16be(stream, pos + 4);
     const { name, next } = readPascalName(stream, pos + 6);
     const sizeOffset = next;

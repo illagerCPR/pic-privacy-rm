@@ -39,16 +39,26 @@ function summary(bytes: Uint8Array) {
 
 describe('XMP encoding', () => {
   it('reads a plain UTF-8 packet', () => {
-    expect(summary(utf8(XML))).toMatchObject({ creator: 'Phil Harvey', tool: 'ExifTool', hasCreator: true });
+    expect(summary(utf8(XML))).toMatchObject({
+      creator: 'Phil Harvey',
+      tool: 'ExifTool',
+      hasCreator: true,
+    });
   });
 
   it('reads a UTF-16 big-endian packet without a BOM', () => {
     // Real files do this: ExifTool's own XMP.jpg uses it to prove the case.
-    expect(summary(utf16(XML, true, false))).toMatchObject({ creator: 'Phil Harvey', tool: 'ExifTool' });
+    expect(summary(utf16(XML, true, false))).toMatchObject({
+      creator: 'Phil Harvey',
+      tool: 'ExifTool',
+    });
   });
 
   it('reads a UTF-16 little-endian packet with a BOM', () => {
-    expect(summary(utf16(XML, false, true))).toMatchObject({ creator: 'Phil Harvey', tool: 'ExifTool' });
+    expect(summary(utf16(XML, false, true))).toMatchObject({
+      creator: 'Phil Harvey',
+      tool: 'ExifTool',
+    });
   });
 
   it('does not mistake plain ASCII for UTF-16', () => {

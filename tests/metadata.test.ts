@@ -89,9 +89,7 @@ describe('full metadata listing', () => {
     const report = makeReport(groups);
     expect(summary).not.toBeNull();
     expect(report.total).toBeGreaterThan(summary?.fields.length ?? 0);
-    expect(report.total).toBe(
-      report.groups.reduce((sum, entry) => sum + entry.items.length, 0),
-    );
+    expect(report.total).toBe(report.groups.reduce((sum, entry) => sum + entry.items.length, 0));
   });
 
   it('marks every EXIF group as removed, because the whole segment goes', () => {

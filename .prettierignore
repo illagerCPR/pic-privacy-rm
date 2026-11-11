@@ -1,0 +1,10 @@
+dist/
+coverage/
+test-results/
+playwright-report/
+tests/real/
+tests/output/
+pnpm-lock.yaml
+*.md
+e2e/downloads/
+tests/fixtures/*.json

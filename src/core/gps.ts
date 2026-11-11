@@ -34,7 +34,11 @@ function textOf(tags: Map<number, TiffIfd['tags'][number]>, tag: number): string
 function decodeUserData(raw: Uint8Array): string {
   const prefix = new TextDecoder('ascii').decode(raw.subarray(0, 8));
   const body = raw.subarray(8);
-  if (prefix.startsWith('ASCII')) return new TextDecoder('utf-8', { fatal: false }).decode(body).replace(/\u0000/g, '').trim();
+  if (prefix.startsWith('ASCII'))
+    return new TextDecoder('utf-8', { fatal: false })
+      .decode(body)
+      .replace(/\u0000/g, '')
+      .trim();
   if (prefix.startsWith('UNICODE')) {
     let s = '';
     for (let i = 0; i + 1 < body.length; i += 2) {
@@ -42,7 +46,10 @@ function decodeUserData(raw: Uint8Array): string {
     }
     return s.replace(/\u0000/g, '').trim();
   }
-  return new TextDecoder('utf-8', { fatal: false }).decode(raw).replace(/\u0000/g, '').trim();
+  return new TextDecoder('utf-8', { fatal: false })
+    .decode(raw)
+    .replace(/\u0000/g, '')
+    .trim();
 }
 
 export function describeGps(ifd: TiffIfd): GpsInfo | null {
@@ -96,7 +103,12 @@ export function describeGps(ifd: TiffIfd): GpsInfo | null {
       sensitive: true,
     });
   } else if (dateText) {
-    fields.push({ label: 'GPSDateStamp', value: dateText.replace(/:/g, '-'), group: 'gps', sensitive: true });
+    fields.push({
+      label: 'GPSDateStamp',
+      value: dateText.replace(/:/g, '-'),
+      group: 'gps',
+      sensitive: true,
+    });
   }
 
   const speedTag = tags.get(0x000d);
@@ -105,7 +117,12 @@ export function describeGps(ifd: TiffIfd): GpsInfo | null {
     const ref = textOf(tags, 0x000c) || 'K';
     const unit = ref === 'M' ? 'mph' : ref === 'N' ? 'kn' : 'km/h';
     if (Number.isFinite(speed)) {
-      fields.push({ label: 'GPSSpeed', value: `${speed.toFixed(1)} ${unit}`, group: 'gps', sensitive: true });
+      fields.push({
+        label: 'GPSSpeed',
+        value: `${speed.toFixed(1)} ${unit}`,
+        group: 'gps',
+        sensitive: true,
+      });
     }
   }
 

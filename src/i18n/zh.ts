@@ -3,6 +3,10 @@ export const zh = {
   'nav.privacy': '隐私说明',
   'nav.github': 'GitHub',
   'nav.lang': '语言',
+  'theme.label': '明暗主题',
+  'theme.system': '跟随系统',
+  'theme.light': '浅色',
+  'theme.dark': '深色',
 
   'hero.title': '移除照片里看不见的隐私',
   'hero.subtitle':
@@ -42,6 +46,7 @@ export const zh = {
   'actions.report': '导出报告',
   'actions.downloadAll': '下载全部 (.zip)',
   'actions.exportBatchReport': '导出批量报告',
+  'actions.exportCsv': '导出 CSV 汇总',
   'actions.details': '详情',
   'actions.clear': '清空',
   'actions.cancel': '取消',
@@ -91,7 +96,8 @@ export const zh = {
   'badge.unknown': '未知块',
   'badge.more': '+{n}',
   'badge.bakeFailed': '方向未烘焙',
-  'badge.bakeFailedHint': '浏览器无法解码这张图，已保留清理结果但未旋转像素；方向标签已按设置处理。',
+  'badge.bakeFailedHint':
+    '浏览器无法解码这张图，已保留清理结果但未旋转像素；方向标签已按设置处理。',
 
   'finding.gps': 'GPS 定位',
   'finding.gps.desc': '照片拍摄地点的经纬度，精度可达数米。',
@@ -208,7 +214,6 @@ export const zh = {
   'error.noFiles': '请先添加图片',
   'error.worker': '后台线程不可用，已切换到主线程',
   'error.zipFailed': '打包失败',
-  'error.zipTooLarge': '压缩包会超过 4 GB 上限，请分批下载',
   'error.reportFailed': '报告生成失败',
 
   'toast.added': '已添加 {n} 个文件',
@@ -218,9 +223,26 @@ export const zh = {
   'toast.batchCancelled': '批量清理已取消：完成 {n} 个，剩余 {left} 个未处理',
   'toast.zipDone': '压缩包已开始下载',
   'toast.reportBatch': '批量报告已开始下载',
+  'toast.csv': '已导出 CSV 汇总',
+  'csv.file': '文件',
+  'csv.format': '格式',
+  'csv.size': '原始大小（字节）',
+  'csv.status': '状态',
+  'csv.findings': '发现项',
+  'csv.categories': '类别',
+  'csv.removed': '可清除字节',
+  'csv.output': '输出大小（字节）',
+  'csv.verify': '复检',
+  'csv.reencoded': '重新编码',
+  'csv.pass': '通过',
+  'csv.fail': '失败',
+  'csv.yes': '是',
+  'csv.no': '否',
+  'csv.error': '错误码',
   'toast.copied': '已复制',
   'toast.report': '报告已导出，其中包含文件元数据，请勿公开分享',
-  'toast.orientationLost': '{n} 个文件的方向标签已删除，若显示为横躺可开启「把方向写入像素」重新清理',
+  'toast.orientationLost':
+    '{n} 个文件的方向标签已删除，若显示为横躺可开启「把方向写入像素」重新清理',
   'toast.orientationLost.one': '方向标签已删除，若显示为横躺可开启「把方向写入像素」重新清理',
 
   'drawer.metadata': '全部元数据',
@@ -249,6 +271,10 @@ export const zh = {
   'meta.before': '清理前',
   'meta.after': '清理后',
   'meta.afterClean': '清理后的文件里已经没有可移除的元数据',
+  'meta.samePixels': '像素数据逐字节保留，只有容器被重写',
+  'meta.reencodedPixels': '方向写入像素时经过 Canvas 重新编码，画质有损',
+  'meta.orientationPreview':
+    '原图带方向标签，浏览器按它旋转了「清理前」；标签已随 EXIF 删除，所以「清理后」不再旋转——像素本身没有变化。',
   'meta.hexShow': '查看字节',
   'meta.hexHide': '收起字节',
   'meta.hexRange': '{shown} / {total} 字节',
@@ -330,6 +356,7 @@ export const zh = {
   'a11y.download': '下载清理后的文件',
   'a11y.remove': '从列表移除',
   'a11y.progress': '处理进度',
+  'a11y.scanDone': '扫描完成：{n} 个文件',
   'a11y.packing': '打包进度',
   'a11y.reporting': '报告生成进度',
 } as const;

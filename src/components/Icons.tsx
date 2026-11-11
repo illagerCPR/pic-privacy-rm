@@ -60,6 +60,15 @@ export function ClipboardIcon(props: IconProps) {
   );
 }
 
+export function TableIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2" />
+      <path d="M3.5 9.5h17M3.5 14.5h17M9.8 4.5v15M14.6 4.5v15" />
+    </Base>
+  );
+}
+
 export function DownloadIcon(props: IconProps) {
   return (
     <Base {...props}>
@@ -96,14 +105,6 @@ export function ChevronRightIcon(props: IconProps) {
   );
 }
 
-export function ChevronDownIcon(props: IconProps) {
-  return (
-    <Base {...props}>
-      <path d="M5 9l7 7 7-7" />
-    </Base>
-  );
-}
-
 export function MapPinIcon(props: IconProps) {
   return (
     <Base {...props}>
@@ -131,15 +132,6 @@ export function ClockIcon(props: IconProps) {
   );
 }
 
-export function UserIcon(props: IconProps) {
-  return (
-    <Base {...props}>
-      <circle cx="12" cy="8.4" r="3.4" />
-      <path d="M5.2 19.4c.9-3 3.5-4.7 6.8-4.7s5.9 1.7 6.8 4.7" />
-    </Base>
-  );
-}
-
 export function AlertIcon(props: IconProps) {
   return (
     <Base {...props}>
@@ -158,12 +150,28 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
-export function GlobeIcon(props: IconProps) {
+export function SunIcon(props: IconProps) {
   return (
     <Base {...props}>
-      <circle cx="12" cy="12" r="8.2" />
-      <path d="M4 12h16" />
-      <path d="M12 3.8c2.4 2.4 3.6 5.2 3.6 8.2s-1.2 5.8-3.6 8.2c-2.4-2.4-3.6-5.2-3.6-8.2S9.6 6.2 12 3.8z" />
+      <circle cx="12" cy="12" r="4.2" />
+      <path d="M12 2.8v2M12 19.2v2M2.8 12h2M19.2 12h2M5.5 5.5l1.4 1.4M17.1 17.1l1.4 1.4M18.5 5.5l-1.4 1.4M6.9 17.1l-1.4 1.4" />
+    </Base>
+  );
+}
+
+export function MoonIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <path d="M20 14.6A8.6 8.6 0 019.4 4a8.6 8.6 0 1010.6 10.6z" />
+    </Base>
+  );
+}
+
+export function MonitorIcon(props: IconProps) {
+  return (
+    <Base {...props}>
+      <rect x="3.2" y="4.6" width="17.6" height="12" rx="2" />
+      <path d="M9 20h6M12 16.6V20" />
     </Base>
   );
 }

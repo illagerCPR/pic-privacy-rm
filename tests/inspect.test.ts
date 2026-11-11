@@ -61,7 +61,10 @@ describe('JPEG full metadata', () => {
       name: 'c2pa.manifest · signer',
       value: 'PicPrivacy Test Signer',
     });
-    expect(c2pa?.items).toContainEqual({ name: 'c2pa.manifest · cert valid from', value: '2024-01-01' });
+    expect(c2pa?.items).toContainEqual({
+      name: 'c2pa.manifest · cert valid from',
+      value: '2024-01-01',
+    });
     expect(c2pa?.items.some((entry) => entry.name === 'JUMBF boxes')).toBe(true);
   });
 
@@ -120,7 +123,9 @@ describe('GIF full metadata', () => {
 
   it('keeps the NETSCAPE looping extension out of the removed set', async () => {
     const report = await inspect('meta.gif');
-    const loop = groupOf(report, 'container')?.items.find((entry) => entry.name === 'Application NETSCAPE2.0');
+    const loop = groupOf(report, 'container')?.items.find(
+      (entry) => entry.name === 'Application NETSCAPE2.0',
+    );
     expect(loop?.removed).toBe(false);
   });
 });
