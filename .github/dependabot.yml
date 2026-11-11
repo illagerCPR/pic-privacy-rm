@@ -9,8 +9,11 @@ updates:
       day: monday
     open-pull-requests-limit: 5
     groups:
+      # Minor and patch updates ride together; a major (TypeScript, Vite,
+      # Vitest) is a migration and deserves its own pull request.
       tooling:
         dependency-type: development
+        update-types: ['minor', 'patch']
         patterns: ['*']
 
   - package-ecosystem: github-actions
