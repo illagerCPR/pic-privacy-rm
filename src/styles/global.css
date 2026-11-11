@@ -751,6 +751,10 @@ img {
   padding: 11px 16px;
   border-top: 1px solid var(--border);
   animation: row-in 0.24s ease both;
+  /* A thousand photos should not mean a thousand decoded thumbnails: keep
+     off-screen rows out of layout and paint until they scroll into view. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
 }
 
 .file-row:first-child {

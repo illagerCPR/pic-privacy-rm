@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { memo, useState } from 'react';
 import type { Item } from '../hooks/useWorkspace.ts';
 import { useI18n } from '../i18n/index.tsx';
 import { badgesFor } from '../lib/finding-ui.ts';
@@ -17,10 +17,10 @@ import type { MessageKey } from '../i18n/zh.ts';
 
 interface Props {
   item: Item;
-  onDetails: () => void;
-  onStrip: () => void;
-  onDownload: () => void;
-  onRemove: () => void;
+  onDetails: (id: string) => void;
+  onStrip: (id: string) => void;
+  onDownload: (id: string) => void;
+  onRemove: (id: string) => void;
 }
 
 function StatusPill({ item }: { item: Item }) {
@@ -86,7 +86,7 @@ function StatusPill({ item }: { item: Item }) {
   }
 }
 
-export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Props) {
+export const FileRow = memo(function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Props) {
   const { t } = useI18n();
   const [thumbBroken, setThumbBroken] = useState(false);
   const badges = item.scan ? badgesFor(item.scan.findings) : [];
@@ -154,6 +154,11 @@ export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Prop
               Canvas
             </span>
           )}
+          {item.result?.bakeFailed && (
+            <span className="badge" data-tone="medium" title={t('badge.bakeFailedHint')}>
+              {t('badge.bakeFailed')}
+            </span>
+          )}
           {item.state === 'failed' && item.result && (
             <span className="badge" data-tone="high">
               {t('error.verifyFailed')}
@@ -167,7 +172,7 @@ export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Prop
           <button
             type="button"
             className="icon-btn"
-            onClick={onDetails}
+            onClick={() => onDetails(item.id)}
             title={t('actions.details')}
             aria-label={`${t('a11y.details')}: ${item.name}`}
           >
@@ -175,7 +180,12 @@ export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Prop
           </button>
         )}
         {showStrip && (
-          <button type="button" className="btn btn--subtle btn--sm" onClick={onStrip} disabled={item.state === 'stripping'}>
+          <button
+            type="button"
+            className="btn btn--subtle btn--sm"
+            onClick={() => onStrip(item.id)}
+            disabled={item.state === 'stripping'}
+          >
             {item.state === 'failed' ? <RefreshIcon size={15} /> : <SparkIcon size={15} />}
             {item.state === 'failed' ? t('actions.retry') : t('actions.strip')}
           </button>
@@ -184,7 +194,7 @@ export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Prop
           <button
             type="button"
             className="btn btn--subtle btn--sm"
-            onClick={onDownload}
+            onClick={() => onDownload(item.id)}
             aria-label={`${t('a11y.download')}: ${item.name}`}
           >
             <DownloadIcon size={15} />
@@ -194,7 +204,7 @@ export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Prop
         <button
           type="button"
           className="icon-btn icon-btn--quiet"
-          onClick={onRemove}
+          onClick={() => onRemove(item.id)}
           title={t('actions.remove')}
           aria-label={`${t('a11y.remove')}: ${item.name}`}
         >
@@ -203,4 +213,4 @@ export function FileRow({ item, onDetails, onStrip, onDownload, onRemove }: Prop
       </div>
     </li>
   );
-}
+});

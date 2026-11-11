@@ -3,7 +3,8 @@ import type { PipelineClient } from '../lib/pipeline-client.ts';
 import type { MetadataReport } from '../core/metadata.ts';
 import type { RemovalEntry, ScanResult, StripOptions, VerifyResult } from '../core/types.ts';
 import { DEFAULT_STRIP_OPTIONS } from '../core/types.ts';
-import { bakeOrientation } from '../lib/bake.ts';
+import { bakeIfNeeded } from '../lib/bake.ts';
+import { isPipelineError } from '../core/errors.ts';
 import { createToken, runBatch, type BatchToken } from '../lib/batch.ts';
 import { archiveName, downloadBlob } from '../lib/download.ts';
 import { buildZip, ZipError, type ZipEntry } from '../lib/zip.ts';
@@ -29,6 +30,8 @@ export interface ItemResult {
   removedBytes: number;
   verify: VerifyResult;
   reencoded: boolean;
+  /** True when the requested orientation bake failed; the strip itself succeeded. */
+  bakeFailed?: boolean;
 }
 
 export interface Item {
@@ -57,9 +60,13 @@ export interface JobProgress {
 interface Settings {
   options: StripOptions;
   bake: boolean;
+  /** Redact sensitive values in exported reports; on unless the user opts out. */
+  redactReports: boolean;
 }
 
 const SETTINGS_KEY = 'picprivacy.settings';
+/** Full metadata listings are large; keep the last few instead of every file. */
+const INSPECT_CACHE_LIMIT = 16;
 
 function loadSettings(): Settings {
   try {
@@ -72,12 +79,13 @@ function loadSettings(): Settings {
           keepIcc: parsed.options?.keepIcc ?? DEFAULT_STRIP_OPTIONS.keepIcc,
         },
         bake: parsed.bake ?? false,
+        redactReports: parsed.redactReports ?? true,
       };
     }
   } catch {
     /* ignore */
   }
-  return { options: DEFAULT_STRIP_OPTIONS, bake: false };
+  return { options: DEFAULT_STRIP_OPTIONS, bake: false, redactReports: true };
 }
 
 function makeId(): string {
@@ -91,6 +99,33 @@ function isImageLike(file: File): boolean {
 
 function isSensitive(scan: ScanResult): boolean {
   return scan.droppedBytes > 0 || scan.findings.some((f) => f.category !== 'icc');
+}
+
+/** The only two states that may produce a download. */
+export type DownloadSource = 'result' | 'passthrough' | null;
+
+/**
+ * Decide whether an item may be downloaded. "done" means the strip was
+ * re-scanned and passed, "clean" means the input was already free of metadata.
+ * A failed item keeps its result for the diagnostic report, but it must never
+ * reach the archive: exporting unverified bytes is exactly what the project
+ * promises not to do.
+ */
+export function downloadableState(item: Item): DownloadSource {
+  if (item.state === 'done' && item.result) return 'result';
+  if (item.state === 'clean') return 'passthrough';
+  return null;
+}
+
+/** Map an engine error to a user-facing i18n key instead of leaking its message. */
+function errorKey(error: unknown): string {
+  if (isPipelineError(error)) {
+    if (error.code === 'unsupported-format') return 'error.unsupported';
+    if (error.code === 'unreadable') return 'error.unreadable';
+    if (error.code === 'worker-crashed' || error.code === 'worker-timeout') return 'error.worker';
+    return 'error.stripFailed';
+  }
+  return 'error.stripFailed';
 }
 
 export interface Workspace {
@@ -114,8 +149,12 @@ export interface Workspace {
   setOptions: (patch: Partial<StripOptions>) => void;
   bake: boolean;
   setBake: (value: boolean) => void;
+  redactReports: boolean;
+  setRedactReports: (value: boolean) => void;
   busy: boolean;
   progress: { done: number; total: number } | null;
+  /** How many scans in the current add batch have finished. */
+  scanProgress: { done: number; total: number } | null;
   /** Packaging or report building in flight, null when idle. */
   job: JobProgress | null;
   /** True once a batch has been asked to stop but a file is still finishing. */
@@ -127,12 +166,15 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   const [items, setItems] = useState<Item[]>([]);
   const [settings, setSettings] = useState<Settings>(() => loadSettings());
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [scanProgress, setScanProgress] = useState<{ done: number; total: number } | null>(null);
   const [batchRunning, setBatchRunning] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [job, setJob] = useState<JobProgress | null>(null);
   const batchRef = useRef<BatchToken | null>(null);
   const jobRef = useRef(false);
   const itemsRef = useRef<Item[]>([]);
+  const scanTotalRef = useRef(0);
+  const scanDoneRef = useRef(0);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
@@ -195,10 +237,19 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
           error: broken ? broken.id : undefined,
         });
       } catch (error) {
-        patchItem(item.id, {
-          state: 'error',
-          error: error instanceof Error ? error.message : 'error.unreadable',
-        });
+        patchItem(item.id, { state: 'error', error: errorKey(error) });
+      } finally {
+        scanDoneRef.current += 1;
+        if (scanTotalRef.current > 0 && scanDoneRef.current >= scanTotalRef.current) {
+          scanDoneRef.current = 0;
+          scanTotalRef.current = 0;
+          setScanProgress(null);
+        } else if (scanTotalRef.current > 0) {
+          setScanProgress({ done: scanDoneRef.current, total: scanTotalRef.current });
+        } else {
+          // The list was cleared while this scan was in flight.
+          scanDoneRef.current = 0;
+        }
       }
     },
     [patchItem, pipeline, scanLimit],
@@ -224,6 +275,8 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
       updateItems((prev) => [...prev, ...created]);
       notify('toast.added', { n: created.length });
       if (skipped > 0) notify('toast.skipped', { n: skipped });
+      scanTotalRef.current += created.length;
+      setScanProgress({ done: scanDoneRef.current, total: scanTotalRef.current });
       for (const item of created) void scanOne(item);
     },
     [notify, scanOne, updateItems],
@@ -250,13 +303,21 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
       return [];
     });
     setProgress(null);
+    scanDoneRef.current = 0;
+    scanTotalRef.current = 0;
+    setScanProgress(null);
   }, [updateItems]);
 
   const runInspect = useCallback(
     async (id: string, side: 'src' | 'out'): Promise<MetadataReport | null> => {
       const key = `${id}:${side}`;
       const cached = inspectCache.current.get(key);
-      if (cached) return cached;
+      if (cached) {
+        // Refresh insertion order so the least recently used entry is evicted.
+        inspectCache.current.delete(key);
+        inspectCache.current.set(key, cached);
+        return cached;
+      }
       const inFlight = inspectPending.current.get(key);
       if (inFlight) return inFlight;
 
@@ -269,6 +330,11 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
         .inspect(blob, { keepIcc: settingsRef.current.options.keepIcc })
         .then((report) => {
           inspectCache.current.set(key, report);
+          while (inspectCache.current.size > INSPECT_CACHE_LIMIT) {
+            const oldest = inspectCache.current.keys().next().value;
+            if (oldest === undefined) break;
+            inspectCache.current.delete(oldest);
+          }
           return report;
         })
         .finally(() => {
@@ -299,19 +365,13 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
         let mime = outcome.result.mime;
         let ext = outcome.result.ext;
         let verify = outcome.verify;
-        let reencoded = false;
 
         const orientation = item.scan?.orientation ?? 1;
-        if (settingsRef.current.bake && orientation > 1) {
-          const baked = await bakeOrientation(blob, orientation, mime);
-          if (baked.blob !== blob) {
-            blob = baked.blob;
-            mime = baked.mime;
-            ext = baked.ext;
-            reencoded = true;
-            verify = await pipeline.verify(blob);
-          }
-        }
+        const baked = await bakeIfNeeded(blob, mime, ext, orientation, settingsRef.current.bake);
+        blob = baked.blob;
+        mime = baked.mime;
+        ext = baked.ext;
+        if (baked.reencoded) verify = await pipeline.verify(blob);
 
         const result: ItemResult = {
           blob,
@@ -320,7 +380,8 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
           removed: outcome.result.removed,
           removedBytes: outcome.result.removedBytes,
           verify,
-          reencoded,
+          reencoded: baked.reencoded,
+          bakeFailed: baked.failed,
         };
 
         inspectCache.current.delete(`${item.id}:out`);
@@ -331,8 +392,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
         patchItem(item.id, { state: 'done', result });
         return true;
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'error.stripFailed';
-        patchItem(item.id, { state: 'failed', error: message });
+        patchItem(item.id, { state: 'failed', error: errorKey(error) });
         return true;
       }
     },
@@ -349,7 +409,16 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
   );
 
   const stripAll = useCallback(async () => {
-    const targets = itemsRef.current.filter((item) => item.state === 'ready' || item.state === 'failed');
+    // A file the parser already rejected cannot be cleaned by retrying it: the
+    // strip pass would throw on the same structure and the batch would waste a
+    // slot. A verified failure is retried, because the settings may have changed.
+    const targets = itemsRef.current.filter(
+      (item) =>
+        item.state === 'ready' ||
+        (item.state === 'failed' &&
+          item.scan?.supported === true &&
+          !item.scan.warnings.some((warning) => warning.severity === 'error')),
+    );
     if (targets.length === 0) return;
     const token = createToken();
     batchRef.current = token;
@@ -372,16 +441,18 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
       notify('toast.batchCancelled', { n: outcome.done, left: outcome.skipped });
       return;
     }
-    const finished = itemsRef.current.filter((item) => item.state === 'done').length;
+    const finished = targets.filter(
+      (target) => itemsRef.current.find((item) => item.id === target.id)?.state === 'done',
+    ).length;
     notify('toast.done', { n: finished });
     // The default path drops the orientation tag; say so instead of leaving the
     // user to discover a sideways photo in their gallery.
-    const sideways = itemsRef.current.filter(
-      (item) =>
-        item.state === 'done' && !settingsRef.current.bake && (item.scan?.orientation ?? 1) > 1,
-    ).length;
+    const sideways = targets.filter((target) => {
+      const item = itemsRef.current.find((entry) => entry.id === target.id);
+      return item?.state === 'done' && !settingsRef.current.bake && (item.scan?.orientation ?? 1) > 1;
+    }).length;
     if (sideways > 0) notify('toast.orientationLost', { n: sideways });
-  }, [notify, stripLimit, stripOne]);
+  }, [notify, stripOne]);
 
   /**
    * Stop the queue, not the file already in flight: that one finishes and is
@@ -418,6 +489,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
         scan: item.scan,
         options: settingsRef.current.options,
         bake: settingsRef.current.bake,
+        redact: settingsRef.current.redactReports,
         result: item.result
           ? {
               size: item.result.size,
@@ -425,6 +497,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
               removed: item.result.removed,
               removedBytes: item.result.removedBytes,
               reencoded: item.result.reencoded,
+              bakeFailed: item.result.bakeFailed ?? false,
               verify: item.result.verify,
             }
           : undefined,
@@ -439,7 +512,9 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     async (id: string) => {
       const item = itemsRef.current.find((entry) => entry.id === id);
       if (!item) return;
-      const result = item.result ?? (item.state === 'clean' ? passthroughResult(item) : undefined);
+      const source = downloadableState(item);
+      const result =
+        source === 'result' ? item.result : source === 'passthrough' ? passthroughResult(item) : undefined;
       if (!result) return;
       downloadBlob(result.blob, result.filename);
     },
@@ -451,7 +526,9 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     const ready: ZipEntry[] = [];
     const taken = new Set<string>();
     for (const item of itemsRef.current) {
-      const result = item.result ?? (item.state === 'clean' ? passthroughResult(item) : undefined);
+      const source = downloadableState(item);
+      const result =
+        source === 'result' ? item.result : source === 'passthrough' ? passthroughResult(item) : undefined;
       if (!result) continue;
       ready.push({ name: uniqueName(result.filename, taken), blob: result.blob });
     }
@@ -485,6 +562,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
         scan: item.scan,
         options: settingsRef.current.options,
         bake: settingsRef.current.bake,
+        redact: settingsRef.current.redactReports,
         result: result
           ? {
               size: result.size,
@@ -492,6 +570,7 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
               removed: result.removed,
               removedBytes: result.removedBytes,
               reencoded: result.reencoded,
+              bakeFailed: result.bakeFailed ?? false,
               verify: result.verify,
             }
           : undefined,
@@ -525,6 +604,10 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     setSettings((prev) => ({ ...prev, bake: value }));
   }, []);
 
+  const setRedactReports = useCallback((value: boolean) => {
+    setSettings((prev) => ({ ...prev, redactReports: value }));
+  }, []);
+
   // A queued batch counts as busy even before the first file starts, otherwise
   // the toolbar offers a second run while the first one is still waiting.
   const busy =
@@ -547,8 +630,11 @@ export function useWorkspace(pipeline: PipelineClient, notify: NotifyFn): Worksp
     setOptions,
     bake: settings.bake,
     setBake,
+    redactReports: settings.redactReports,
+    setRedactReports,
     busy,
     progress,
+    scanProgress,
     job,
     cancelling,
     cancelBatch,

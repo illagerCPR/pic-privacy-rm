@@ -26,6 +26,45 @@ export interface BakedImage {
   ext: string;
 }
 
+export interface BakeOutcome extends BakedImage {
+  /** True when the pixels were actually rotated (and re-encoded). */
+  reencoded: boolean;
+  /** True when baking was requested but failed; the stripped bytes are untouched. */
+  failed: boolean;
+}
+
+/**
+ * Bake when asked, and never lose the strip when the browser cannot decode the
+ * image. Canvas decoding is the one step outside our byte-level guarantees: a
+ * CMYK JPEG or a damaged but structurally valid file can be cleaned perfectly
+ * and still fail `createImageBitmap`. The clean output is the product; baking
+ * is a convenience on top, so a failure falls back to the untouched strip.
+ */
+export async function bakeIfNeeded(
+  blob: Blob,
+  mime: string,
+  ext: string,
+  orientation: number,
+  enabled: boolean,
+  bake: (blob: Blob, orientation: number, mime: string) => Promise<BakedImage> = bakeOrientation,
+): Promise<BakeOutcome> {
+  if (!enabled || orientation <= 1) {
+    return { blob, mime, ext, reencoded: false, failed: false };
+  }
+  try {
+    const baked = await bake(blob, orientation, mime);
+    return {
+      blob: baked.blob,
+      mime: baked.mime,
+      ext: baked.ext,
+      reencoded: baked.blob !== blob,
+      failed: false,
+    };
+  } catch {
+    return { blob, mime, ext, reencoded: false, failed: true };
+  }
+}
+
 export async function bakeOrientation(
   input: Blob,
   orientation: number,

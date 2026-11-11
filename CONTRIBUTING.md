@@ -143,7 +143,8 @@ change: `git checkout --` the rest.
 - XMP is XML and may be UTF-16: decode the BOM (or the zero-byte pattern) before scanning. ExifTool keeps a
   big-endian UTF-16 sample precisely because tools get this wrong; ours reported an empty packet.
 - Exported reports are a public format now. Add fields, never rename or repurpose them, and keep binaries
-  out: payloads are described by size.
+  out: payloads are described by size. Sensitive values are redacted by default; `Field.sensitive` is the
+  flag the report uses, so a new field that can identify a person must set it.
 - A ZIP built from Blob references still has to describe each member: `method = 0`, the real CRC-32 in the
   local header, and bit 11 of the flags set or non-ASCII names turn into mojibake. Sizes and offsets are
   32-bit, so an archive past 4 GiB needs Zip64 — we refuse it with a clear message instead of writing one

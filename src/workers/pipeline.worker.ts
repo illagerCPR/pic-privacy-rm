@@ -4,6 +4,7 @@
  * from interleaving two Blob-reading jobs, and serial execution keeps memory
  * flat and behaviour deterministic.
  */
+import { isPipelineError } from '../core/errors.ts';
 import { inspectBlob } from '../core/inspect.ts';
 import { scanFile, stripFile, verifyBlob } from '../core/pipeline.ts';
 import type { StripOptions } from '../core/types.ts';
@@ -42,7 +43,12 @@ async function handle(request: Request): Promise<void> {
     scope.postMessage({
       id: request.id,
       ok: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: isPipelineError(error)
+        ? { code: error.code, params: error.params }
+        : {
+            code: 'strip-failed',
+            params: { message: error instanceof Error ? error.message : String(error) },
+          },
     });
   }
 }

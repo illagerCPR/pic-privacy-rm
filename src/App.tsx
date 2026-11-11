@@ -87,7 +87,20 @@ export default function App() {
   );
 
   const workspace = useWorkspace(pipeline, notify);
-  const { items, addFiles } = workspace;
+  const { items, addFiles, stripItem, downloadItem, removeItem } = workspace;
+
+  // Stable callbacks keep memoized rows from re-rendering when another file in
+  // the list changes state.
+  const openDetails = useCallback((id: string) => setDetailId(id), []);
+  const stripOne = useCallback((id: string) => void stripItem(id), [stripItem]);
+  const downloadOne = useCallback((id: string) => void downloadItem(id), [downloadItem]);
+  const removeOne = useCallback(
+    (id: string) => {
+      removeItem(id);
+      setDetailId((current) => (current === id ? null : current));
+    },
+    [removeItem],
+  );
 
   const stats: Stats = useMemo(() => {
     let sensitive = 0;
@@ -169,6 +182,8 @@ export default function App() {
               setOptions={workspace.setOptions}
               bake={workspace.bake}
               setBake={workspace.setBake}
+              redactReports={workspace.redactReports}
+              setRedactReports={workspace.setRedactReports}
               orientationCount={orientationCount}
               onStripAll={() => void workspace.stripAll()}
               onDownloadAll={() => void workspace.downloadAll()}
@@ -179,19 +194,17 @@ export default function App() {
               cancelling={workspace.cancelling}
               busy={workspace.busy}
               progress={workspace.progress}
+              scanProgress={workspace.scanProgress}
               job={workspace.job}
               canStripAll={canStripAll}
               canDownloadAll={canDownloadAll}
             />
             <FileList
               items={items}
-              onDetails={setDetailId}
-              onStrip={(id) => void workspace.stripItem(id)}
-              onDownload={(id) => void workspace.downloadItem(id)}
-              onRemove={(id) => {
-                workspace.removeItem(id);
-                setDetailId((current) => (current === id ? null : current));
-              }}
+              onDetails={openDetails}
+              onStrip={stripOne}
+              onDownload={downloadOne}
+              onRemove={removeOne}
             />
           </>
         )}

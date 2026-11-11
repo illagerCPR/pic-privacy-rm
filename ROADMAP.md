@@ -23,8 +23,14 @@
 
 七种格式的无损引擎（JPEG / PNG / WebP / GIF、共用 ISOBMFF 栈的 HEIC / AVIF，以及 TIFF）、双语界面、
 单张与批量、方向烘焙开关、service worker 离线、CI 与 Pages 自动部署；「全部元数据」视图（全量 EXIF /
-XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **156 个单测（CI）+ 32 个
-真实样本用例（本地）+ 17 个 Chrome e2e**，外加 `pnpm verify` 独立复核 46 个输出文件与离线断言。
+XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）；质量面为 **172 个单测（CI）+ 32 个
+真实样本用例（本地）+ 18 个 Chrome e2e**，外加 `pnpm verify` 独立复核 46 个输出文件与离线断言。
+
+**改进第一轮（2026-11-11，P0/P1/P2）**：批量 ZIP 只收 `done`/`clean`，复检失败的产物不再混进归档；
+`verifyBlob` 按用户设置复检，保留 trailer 不再被判失败；方向烘焙失败会回退未烘焙结果并打标；引擎错误
+改为 typed code + i18n；诊断报告默认把 GPS、序列号、作者替换为 `[redacted]`（设置里可关闭）；scan/strip
+改为双 worker，列表行 memo + `content-visibility`，PNG 的 IDAT 不再做 CRC 全量读、JPEG 熵扫描改用
+`indexOf`，inspect 缓存加上限，报告哈希改为流式 SHA-256，并新增扫描进度行。
 
 **可访问性与批量报告**：详情抽屉改为真正的模态对话框——打开即把焦点移入面板、Tab / Shift+Tab 在
 面板内首尾循环、Escape 关闭后焦点回到触发它的按钮。工具栏新增「导出批量报告」：把每张文件的
@@ -74,6 +80,6 @@ findings/警告/容器块、生效设置，以及清理后的 removed 与复检�
 **站点可访问性（原第 5 项）**：维护者为 `www.illageraris.dpdns.org/*` 配了 Cloudflare 跳过挑战规则，
 之后 `curl` 与自动化对首页、JS、CSS、`sw.js`、favicon 全部 200（此前一律 403）。仓库侧无需改动。
 
-顺手可做的两件运维小事：在 Pages 设置里打开 Enforce HTTPS —— 现在 301 的 `Location` 是 `http://`，
-等于多一次不安全跳转；关掉 Cloudflare 的 Web Analytics / Rocket Loader —— 注入的 beacon 会被 CSP 拦下，
-开发者工具里会留下 status 0 的请求，容易让「零网络」的验证者误判。
+**运维（2026-11-11 复查）**：Pages 的 Enforce HTTPS 已打开，`http://` 现在 301 到 HTTPS；Cloudflare 的
+Web Analytics / Rocket Loader 已关，线上 HTML 不再注入 beacon。HSTS 仍需在 Cloudflare 侧加
+`Strict-Transport-Security`（Pages 不支持自定义响应头）。

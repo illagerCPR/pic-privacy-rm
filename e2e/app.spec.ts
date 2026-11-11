@@ -426,8 +426,36 @@ test('exports a reproducible diagnostic report', async ({ page }) => {
   expect(report.scan.findings.length).toBeGreaterThan(0);
   expect(report.scan.hasC2pa).toBe(true);
   expect(report.scan.blocks.length).toBeGreaterThan(0);
+  // Sensitive values are redacted by default; the report is meant to be shared.
+  expect(report.redaction).toEqual({ applied: true });
+  const gps = report.scan.findings.find((finding: any) => finding.category === 'gps');
+  expect(gps.params.lat).toBe('[redacted]');
+  expect(readFileSync(path, 'utf8')).not.toContain('35.689');
   // Nothing was cleaned yet, so there is no verification block to report.
   expect(report.result).toBeUndefined();
+});
+
+test('reports the exact values only when redaction is turned off', async ({ page }) => {
+  await page.goto('/');
+  await page.setInputFiles('input[type=file] >> nth=0', [join(fixtures, 'meta.jpg')]);
+  await expect(page.locator('.status', { hasText: '扫描中' })).toHaveCount(0);
+
+  const toggle = page.locator('.setting', { hasText: '报告默认脱敏' });
+  await expect(toggle.locator('input')).toBeChecked();
+  await toggle.locator('.setting-label').click();
+  await expect(toggle.locator('input')).not.toBeChecked();
+
+  await page.locator('.file-row', { hasText: 'meta.jpg' }).locator('button[aria-label^="查看详情"]').click();
+  const downloadPromise = page.waitForEvent('download');
+  await page.locator('.drawer').getByRole('button', { name: '导出报告' }).click();
+  const download = await downloadPromise;
+  const path = join(outDir, 'report-meta-full.json');
+  await download.saveAs(path);
+  const report = JSON.parse(readFileSync(path, 'utf8'));
+
+  expect(report.redaction).toEqual({ applied: false });
+  const gps = report.scan.findings.find((finding: any) => finding.category === 'gps');
+  expect(gps.params.lat).toMatch(/^35\.689/);
 });
 
 test('packages a long batch and every member matches the single-file download', async ({ page }) => {

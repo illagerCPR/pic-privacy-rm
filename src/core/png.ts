@@ -114,8 +114,11 @@ export async function analyzePng(src: Source, opts: StripOptions): Promise<Conta
     }
 
     if (keep) {
-      // Validate the CRC of the chunks we keep so a corrupted source is visible.
-      if (length <= 1024 * 1024) {
+      // Validate the CRC of the small structural/metadata chunks. IDAT/fdAT can
+      // be megabytes of pixel data; the strip pass copies them verbatim and the
+      // independent verifier decodes the output, so reading every pixel chunk
+      // here would only double the scan cost of a large batch.
+      if (type !== 'IDAT' && type !== 'fdAT' && length <= 1024 * 1024) {
         const body = await readAt(src, pos + 4, 4 + length);
         const stored = u32be(await readAt(src, dataEnd, 4), 0);
         if (crc32(body) !== stored) {

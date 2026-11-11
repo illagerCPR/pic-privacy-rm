@@ -19,6 +19,8 @@ interface Props {
   setOptions: (patch: Partial<StripOptions>) => void;
   bake: boolean;
   setBake: (value: boolean) => void;
+  redactReports: boolean;
+  setRedactReports: (value: boolean) => void;
   orientationCount: number;
   onStripAll: () => void;
   onDownloadAll: () => void;
@@ -29,6 +31,8 @@ interface Props {
   cancelling: boolean;
   busy: boolean;
   progress: { done: number; total: number } | null;
+  /** How many files in the current add batch have been scanned. */
+  scanProgress: { done: number; total: number } | null;
   /** Packaging or report building, so a long batch shows movement. */
   job: JobProgress | null;
   canStripAll: boolean;
@@ -64,6 +68,10 @@ export function Toolbar(props: Props) {
   const { t } = useI18n();
   const { stats, progress, job } = props;
   const percent = progress && progress.total > 0 ? (progress.done / progress.total) * 100 : 0;
+  const scanPercent =
+    props.scanProgress && props.scanProgress.total > 0
+      ? (props.scanProgress.done / props.scanProgress.total) * 100
+      : 0;
   const jobPercent = job && job.total > 0 ? (job.done / job.total) * 100 : 0;
 
   return (
@@ -122,6 +130,17 @@ export function Toolbar(props: Props) {
         </div>
       </div>
 
+      {props.scanProgress && (
+        <div className="progress" role="status" aria-live="polite" aria-label={t('a11y.progress')}>
+          <div className="progress-track">
+            <div className="progress-bar" style={{ width: `${scanPercent}%` }} />
+          </div>
+          <span className="progress-text">
+            {t('status.scanning')} {props.scanProgress.done} / {props.scanProgress.total}
+          </span>
+        </div>
+      )}
+
       {progress && (
         <div className="progress" role="status" aria-live="polite" aria-label={t('a11y.progress')}>
           <div className="progress-track">
@@ -175,6 +194,12 @@ export function Toolbar(props: Props) {
           onChange={props.setBake}
           label={t('settings.bake')}
           hint={t('settings.bakeHint')}
+        />
+        <Toggle
+          checked={props.redactReports}
+          onChange={props.setRedactReports}
+          label={t('settings.redactReports')}
+          hint={t('settings.redactReportsHint')}
         />
         {!props.bake && props.orientationCount > 0 && (
           <div className="settings-callout" role="note">

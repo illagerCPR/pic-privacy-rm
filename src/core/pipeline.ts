@@ -5,6 +5,7 @@ import { analyzeJpeg } from './jpeg.ts';
 import { analyzePng } from './png.ts';
 import { analyzeTiff } from './tiff-image.ts';
 import { analyzeWebp } from './webp.ts';
+import { PipelineError } from './errors.ts';
 import { sniff } from './sniff.ts';
 import { sourceFromBlob, type Source } from './source.ts';
 import {
@@ -89,12 +90,13 @@ export async function stripSource(
 ): Promise<StripResult> {
   const info = await sniff(src);
   if (!info.supported) {
-    throw new Error(`unsupported-format:${info.format}`);
+    throw new PipelineError('unsupported-format', { format: info.format });
   }
   const analysis = await analyse(src, opts);
-  if (!analysis) throw new Error(`unsupported-format:${info.format}`);
+  if (!analysis) throw new PipelineError('unsupported-format', { format: info.format });
   if (!analysis.ok) {
-    throw new Error(`unreadable:${analysis.warnings.find((w) => w.severity === 'error')?.id ?? 'unknown'}`);
+    const warning = analysis.warnings.find((w) => w.severity === 'error');
+    throw new PipelineError('unreadable', { warning: warning?.id ?? 'unknown' });
   }
 
   const blobParts: BlobPart[] = analysis.parts.map((part) =>
@@ -142,10 +144,19 @@ const SENSITIVE_CATEGORIES = new Set([
 ]);
 
 /** Re-scan the stripped output: nothing sensitive may survive. */
-export async function verifyBlob(blob: Blob, expectFormat?: Format): Promise<VerifyResult> {
+export async function verifyBlob(
+  blob: Blob,
+  expectFormat?: Format,
+  opts: StripOptions = DEFAULT_STRIP_OPTIONS,
+): Promise<VerifyResult> {
   const src = sourceFromBlob(blob);
-  const scan = await scanSource(src);
-  const leftovers = scan.findings.filter((f) => SENSITIVE_CATEGORIES.has(f.category));
+  const scan = await scanSource(src, opts);
+  const leftovers = scan.findings.filter(
+    (f) =>
+      SENSITIVE_CATEGORIES.has(f.category) &&
+      // Keeping trailing bytes is an explicit user choice; it is not a leftover.
+      !(f.category === 'trailer' && !opts.truncateTrailer),
+  );
   const formatMismatch = expectFormat !== undefined && scan.format !== expectFormat;
   return {
     ok: scan.supported && !formatMismatch && leftovers.length === 0 && !scan.warnings.some((w) => w.severity === 'error'),
@@ -173,6 +184,6 @@ export interface StripOutcome {
 export async function stripFile(file: File, opts?: StripOptions): Promise<StripOutcome> {
   const src = sourceFromBlob(file);
   const result = await stripSource(src, opts);
-  const verify = await verifyBlob(result.blob, result.format);
+  const verify = await verifyBlob(result.blob, result.format, opts ?? DEFAULT_STRIP_OPTIONS);
   return { result, verify };
 }

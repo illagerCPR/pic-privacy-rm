@@ -36,7 +36,7 @@ describe('diagnostic report', () => {
 
   it('keeps findings readable but turns every payload into a size', async () => {
     const scan = await scanFile(file);
-    const json = await buildReport({ file, scan, options: DEFAULT_STRIP_OPTIONS, bake: false });
+    const json = await buildReport({ file, scan, options: DEFAULT_STRIP_OPTIONS, bake: false, redact: false });
     const report = JSON.parse(json) as any;
 
     expect(report.scan.findings.length).toBe(scan.findings.length);
@@ -53,6 +53,26 @@ describe('diagnostic report', () => {
     for (const finding of report.scan.findings) {
       if (finding.manifest) expect(finding.manifest.thumbnail?.bytes ?? 0).toBeLessThan(1e7);
     }
+  });
+
+  it('redacts sensitive values by default, and says so', async () => {
+    const scan = await scanFile(file);
+    const report = await parsed({ file, scan, options: DEFAULT_STRIP_OPTIONS, bake: false });
+
+    expect(report.redaction).toEqual({ applied: true });
+    const gps = report.scan.findings.find((finding: any) => finding.category === 'gps');
+    expect(gps.params.lat).toBe('[redacted]');
+    expect(gps.params.lon).toBe('[redacted]');
+    expect(gps.params.mapUrl).toBe('[redacted]');
+    expect(gps.fields.find((field: any) => field.label === 'GPSLatitude').value).toBe('[redacted]');
+
+    const exif = report.scan.findings.find((finding: any) => finding.category === 'exif');
+    expect(exif.params.make).toBe('[redacted]');
+    expect(exif.params.model).toBe('[redacted]');
+    expect(exif.params.count).toBeGreaterThan(0);
+    const make = exif.fields.find((field: any) => field.label === 'Make');
+    expect(make.value).toBe('[redacted]');
+    expect(make.sensitive).toBe(true);
   });
 
   it('adds the verification block only for a cleaned file', async () => {

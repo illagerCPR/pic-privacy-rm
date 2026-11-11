@@ -16,10 +16,10 @@ export function FileList({ items, onDetails, onStrip, onDownload, onRemove }: Pr
         <FileRow
           key={item.id}
           item={item}
-          onDetails={() => onDetails(item.id)}
-          onStrip={() => onStrip(item.id)}
-          onDownload={() => onDownload(item.id)}
-          onRemove={() => onRemove(item.id)}
+          onDetails={onDetails}
+          onStrip={onStrip}
+          onDownload={onDownload}
+          onRemove={onRemove}
         />
       ))}
     </ul>

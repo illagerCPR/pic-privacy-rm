@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { sourceFromBytes } from '../src/core/source.ts';
-import { scanSource, stripSource, verifyBlob } from '../src/core/pipeline.ts';
+import { scanSource, stripFile, stripSource, verifyBlob } from '../src/core/pipeline.ts';
 import { DEFAULT_STRIP_OPTIONS, type ScanResult } from '../src/core/types.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
@@ -193,12 +193,29 @@ describe('stripping', () => {
     expect(Buffer.from(without).includes(Buffer.from('TRAILING-DATA-AFTER-EOI'))).toBe(true);
   });
 
-  it('refuses truncated input rather than emitting broken files', async () => {
-    await expect(stripSource(sourceFromBytes(fixture('broken.jpg')), DEFAULT_STRIP_OPTIONS)).rejects.toThrow();
+  it('verifies a trailer the user chose to keep', async () => {
+    const file = new File([Uint8Array.from(fixture('meta.jpg'))], 'meta.jpg', { type: 'image/jpeg' });
+    const outcome = await stripFile(file, { ...DEFAULT_STRIP_OPTIONS, truncateTrailer: false });
+    expect(outcome.verify.ok).toBe(true);
+    expect(outcome.verify.leftovers).toEqual([]);
   });
 
-  it('refuses unsupported formats', async () => {
-    await expect(stripSource(sourceFromBytes(fixture('fake.heic')), DEFAULT_STRIP_OPTIONS)).rejects.toThrow();
+  it('refuses truncated input rather than emitting broken files', async () => {
+    await expect(stripSource(sourceFromBytes(fixture('broken.jpg')), DEFAULT_STRIP_OPTIONS)).rejects.toMatchObject({
+      code: 'unreadable',
+    });
+  });
+
+  it('refuses a file whose format it cannot identify', async () => {
+    await expect(stripSource(sourceFromBytes(fixture('note.txt')), DEFAULT_STRIP_OPTIONS)).rejects.toMatchObject({
+      code: 'unsupported-format',
+    });
+  });
+
+  it('reports a malformed container as unreadable', async () => {
+    await expect(stripSource(sourceFromBytes(fixture('fake.heic')), DEFAULT_STRIP_OPTIONS)).rejects.toMatchObject({
+      code: 'unreadable',
+    });
   });
 
   it('keeps the JPEG codestream intact (pixels unchanged)', async () => {

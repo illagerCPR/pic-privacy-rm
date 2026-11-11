@@ -64,6 +64,9 @@ export const zh = {
   'settings.orientationFix': '把方向写入像素',
   'settings.bakeHint':
     '删掉 EXIF 方向标签后，部分查看器会把照片显示成横躺。开启后会用 Canvas 重新编码并摆正（画质有损）。',
+  'settings.redactReports': '报告默认脱敏',
+  'settings.redactReportsHint':
+    '导出的 JSON 会把 GPS、序列号、作者等敏感值替换为 [redacted]；关闭后写入原始值。',
 
   'status.scanning': '扫描中',
   'status.ready': '待清理',
@@ -87,6 +90,8 @@ export const zh = {
   'badge.mpf': '多图',
   'badge.unknown': '未知块',
   'badge.more': '+{n}',
+  'badge.bakeFailed': '方向未烘焙',
+  'badge.bakeFailedHint': '浏览器无法解码这张图，已保留清理结果但未旋转像素；方向标签已按设置处理。',
 
   'finding.gps': 'GPS 定位',
   'finding.gps.desc': '照片拍摄地点的经纬度，精度可达数米。',

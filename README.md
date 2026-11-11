@@ -64,8 +64,10 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
   shown next to the original, so what survived is evidence rather than a promise.
 - **Export a diagnostic report.** If a result ever looks wrong, download a JSON report of exactly what the
   engine saw — hashes, findings, container blocks, settings and the verification result — and attach it to
-  a bug report. One file from its details panel, or the whole batch as a single document. It describes the
-  metadata, not the picture, but give it a read before sharing.
+  a bug report. One file from its details panel, or the whole batch as a single document. Sensitive values
+  (GPS coordinates, serial numbers, author fields) are replaced with `[redacted]` by default; turn
+  *Redact exported reports* off to write the exact values. It describes the metadata, not the picture, so
+  give it a read before sharing either way.
 - Batch clean, per-file states, progress — cancellable at any point, with the file in flight
   allowed to finish so its output is still verified — and a store-only ZIP for download.
 - Optional deep-clean of trailing data after the end marker.

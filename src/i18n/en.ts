@@ -69,6 +69,9 @@ export const en: Dict = {
   'settings.orientationFix': 'Bake orientation',
   'settings.bakeHint':
     'Some viewers show photos sideways once the EXIF orientation tag is gone. This rotates the pixels with Canvas and re-encodes the image (lossy).',
+  'settings.redactReports': 'Redact exported reports',
+  'settings.redactReportsHint':
+    'Replace GPS, serial numbers and author fields with [redacted] in the JSON; turn this off to write the original values.',
 
   'status.scanning': 'Scanning',
   'status.ready': 'Ready',
@@ -92,6 +95,9 @@ export const en: Dict = {
   'badge.mpf': 'Multi-picture',
   'badge.unknown': 'Unknown block',
   'badge.more': '+{n}',
+  'badge.bakeFailed': 'Orientation not baked',
+  'badge.bakeFailedHint':
+    'The browser could not decode this image. The clean result is kept but the pixels were not rotated; the orientation tag was handled as configured.',
 
   'finding.gps': 'GPS location',
   'finding.gps.desc': 'Latitude and longitude of the spot where the photo was taken, accurate to metres.',

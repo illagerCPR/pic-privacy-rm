@@ -604,7 +604,7 @@ describe('TIFF refusals', () => {
     const scan = await scanSource(sourceFromBytes(bytes));
     const error = scan.warnings.find((warning) => warning.severity === 'error');
     expect(error, 'expected an error-level warning').toBeDefined();
-    await expect(stripSource(sourceFromBytes(bytes))).rejects.toThrow(/^unreadable:/);
+    await expect(stripSource(sourceFromBytes(bytes))).rejects.toMatchObject({ code: 'unreadable' });
     return error!.id;
   }
 

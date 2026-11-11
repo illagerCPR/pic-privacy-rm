@@ -73,15 +73,30 @@ async function findScanEnd(src: Source, start: number): Promise<number | null> {
   while (offset < src.size) {
     const chunk = await readAt(src, offset, Math.min(SCAN_CHUNK, src.size - offset));
     if (chunk.length < 2) return null;
-    for (let i = 0; i < chunk.length; i += 1) {
-      if (chunk[i] !== 0xff) continue;
-      const next = chunk[i + 1];
-      if (next === undefined) break; // pair spans the chunk boundary; re-read from here
-      if (next === 0x00 || next === 0xff) continue;
-      if (next >= 0xd0 && next <= 0xd7) continue;
-      return offset + i;
+    let cursor = 0;
+    // Advance to the next 0xff with the native search: entropy data is mostly
+    // ordinary bytes, and a byte-at-a-time loop dominated large JPEG scans.
+    let resumeAt = chunk.length;
+    while (cursor < chunk.length) {
+      const at = chunk.indexOf(0xff, cursor);
+      if (at === -1) break;
+      const next = chunk[at + 1];
+      if (next === undefined) {
+        // The pair spans the chunk boundary; re-read from the 0xff itself.
+        resumeAt = at;
+        break;
+      }
+      if (next === 0x00 || next === 0xff) {
+        cursor = at + 1;
+        continue;
+      }
+      if (next >= 0xd0 && next <= 0xd7) {
+        cursor = at + 2;
+        continue;
+      }
+      return offset + at;
     }
-    offset += chunk.length - 1;
+    offset += resumeAt;
   }
   return null;
 }

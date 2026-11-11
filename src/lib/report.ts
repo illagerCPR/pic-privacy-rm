@@ -8,6 +8,7 @@
  */
 import type { Finding, ScanResult, StripOptions, VerifyResult } from '../core/types.ts';
 import { baseNameOf } from './files.ts';
+import { sha256Blob } from './sha256.ts';
 
 declare const __APP_VERSION__: string;
 
@@ -25,6 +26,7 @@ export interface ReportResultInput {
   removed: { id: string; count: number; bytes: number }[];
   removedBytes: number;
   reencoded: boolean;
+  bakeFailed?: boolean;
   verify: VerifyResult;
 }
 
@@ -33,30 +35,82 @@ export interface ReportInput {
   scan: ScanResult;
   options: StripOptions;
   bake: boolean;
+  /**
+   * Replace sensitive values with `[redacted]`. On by default: the report is
+   * meant to be attached to a bug report, and it describes the very GPS
+   * coordinates and serial numbers the user came here to remove.
+   */
+  redact?: boolean;
   /** Absent until the file has actually been cleaned. */
   result?: ReportResultInput;
 }
 
-/** Blobs cannot survive JSON, so every payload becomes a measurement. */
-function plainFinding(finding: Finding): Record<string, unknown> {
-  const { preview, manifest, ...rest } = finding;
+const REDACTED = '[redacted]';
+/**
+ * Params that describe structure rather than a person. Everything else with a
+ * string value is replaced when redaction is on: `lat`, `lon`, `mapUrl`, `text`,
+ * `make`, `model`, `keywords` and any future field are covered by default.
+ */
+const SAFE_PARAM_KEYS = new Set([
+  'format',
+  'type',
+  'types',
+  'block',
+  'chunk',
+  'item',
+  'codec',
+  'id',
+  'kind',
+  'warning',
+  'namespaces',
+]);
+
+function redactParams(
+  params: Record<string, string | number> | undefined,
+): Record<string, string | number> | undefined {
+  if (!params) return params;
+  const out: Record<string, string | number> = {};
+  for (const [key, value] of Object.entries(params)) {
+    out[key] = typeof value === 'number' || SAFE_PARAM_KEYS.has(key) ? value : REDACTED;
+  }
+  return out;
+}
+
+function redactManifest(manifest: NonNullable<Finding['manifest']>): Record<string, unknown> {
   return {
-    ...rest,
-    ...(preview ? { preview: { mime: preview.mime, bytes: preview.blob.size } } : {}),
-    ...(manifest
-      ? {
-          manifest: {
-            ...manifest,
-            thumbnail: manifest.thumbnail ? { bytes: manifest.thumbnail.size } : undefined,
-          },
-        }
-      : {}),
+    ...manifest,
+    title: manifest.title ? REDACTED : undefined,
+    signer: manifest.signer ? REDACTED : undefined,
+    issuer: manifest.issuer ? REDACTED : undefined,
+    thumbnail: manifest.thumbnail ? { bytes: manifest.thumbnail.size } : undefined,
   };
 }
 
-async function sha256(file: File): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
-  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+/** Blobs cannot survive JSON, so every payload becomes a measurement. */
+function plainFinding(finding: Finding, redact: boolean): Record<string, unknown> {
+  const { preview, manifest, fields, params, ...rest } = finding;
+  return {
+    ...rest,
+    ...(params ? { params: redact ? redactParams(params) : params } : {}),
+    ...(fields
+      ? {
+          fields: redact
+            ? fields.map((field) => (field.sensitive ? { ...field, value: REDACTED } : field))
+            : fields,
+        }
+      : {}),
+    ...(preview ? { preview: { mime: preview.mime, bytes: preview.blob.size } } : {}),
+    ...(manifest
+      ? {
+          manifest: redact
+            ? redactManifest(manifest)
+            : {
+                ...manifest,
+                thumbnail: manifest.thumbnail ? { bytes: manifest.thumbnail.size } : undefined,
+              },
+        }
+      : {}),
+  };
 }
 
 export function reportFileName(original: string): string {
@@ -77,15 +131,17 @@ export function batchReportName(date = new Date()): string {
 /** One report body; `buildReport` and the batch document share it verbatim. */
 async function reportBody(input: ReportInput): Promise<Record<string, unknown>> {
   const { file, scan, options, bake, result } = input;
+  const redact = input.redact ?? true;
   return {
     schema: REPORT_SCHEMA,
     app: { name: 'PicPrivacy', version: APP_VERSION },
     generatedAt: new Date().toISOString(),
+    redaction: { applied: redact },
     file: {
       name: file.name,
       size: file.size,
       declaredType: file.type || null,
-      sha256: await sha256(file),
+      sha256: await sha256Blob(file),
       format: scan.format,
       supported: scan.supported,
     },
@@ -99,7 +155,7 @@ async function reportBody(input: ReportInput): Promise<Record<string, unknown>> 
       droppedBytes: scan.droppedBytes,
       keptBytes: scan.keptBytes,
       hasC2pa: scan.hasC2pa,
-      findings: scan.findings.map(plainFinding),
+      findings: scan.findings.map((finding) => plainFinding(finding, redact)),
       warnings: scan.warnings,
       blocks: scan.blocks,
     },
@@ -107,7 +163,10 @@ async function reportBody(input: ReportInput): Promise<Record<string, unknown>> 
       ? {
           result: {
             ...result,
-            verify: { ...result.verify, leftovers: result.verify.leftovers.map(plainFinding) },
+            verify: {
+              ...result.verify,
+              leftovers: result.verify.leftovers.map((finding) => plainFinding(finding, redact)),
+            },
           },
         }
       : {}),
