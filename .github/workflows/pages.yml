@@ -33,7 +33,7 @@ jobs:
       - name: Build for project pages
         run: pnpm build --base=/pic-privacy-rm/
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
