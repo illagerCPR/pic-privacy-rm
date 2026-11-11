@@ -23,7 +23,7 @@ PicPrivacy shows you what is inside a file and then removes it — losslessly, b
 | **PNG** | `tEXt` / `zTXt` / `iTXt` text, `eXIf`, `tIME`, `caBX` (C2PA), Apple `iDOT`, unknown ancillary chunks | pixels, colour chunks (`iCCP`, `gAMA`, `sRGB`, …), APNG frames |
 | **WebP** | `EXIF`, `XMP `, `C2PA`, `JUMBF` chunks (and the corresponding flag bits in `VP8X`) | pixels, alpha, animation, ICC |
 | **GIF** | comment extensions, XMP application extension, trailing bytes | every frame, colour tables, looping |
-| **HEIC / AVIF** | the `Exif` item (including GPS), the XMP `mime` item, `jumb` (C2PA), unknown items | picture items (tiles, `grid`, `av01`, alpha, thumbnail, HDR gain map), codec and colour properties |
+| **HEIC / AVIF** | the `Exif` item (including GPS), the XMP `mime` item, `jumb` (C2PA), unknown items | picture items (tiles, `grid`, `av01`, alpha, thumbnails), codec and colour properties |
 | **TIFF** | descriptive tags (Make / Model / Artist / Copyright / Software / DateTime / description / XP*), the Exif and GPS sub-directories, XMP (`0x02bc`), IPTC (`0x83bb`), Photoshop resources (`0x8649`), GeoTIFF georeferencing, reduced-resolution directories (thumbnails), APPn inside embedded JPEG strips, unknown tags | every page's pixel data (strips and tiles copied verbatim), size / depth / compression / colour tags, `Orientation`, ICC, `JPEGTables` |
 
 Each file is re-scanned after cleaning and the download is blocked unless the result is provably clean.
@@ -60,19 +60,22 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
   Exif, GPS, Interop, thumbnail directory), every XMP property, IPTC fields, C2PA claims, and the container
   blocks themselves. Vendor blobs such as MakerNote are not guessed at — they are shown as raw bytes in a
   hex viewer.
-- **Before and after, side by side.** Once a file is cleaned, the same table can be run on the output and
-  shown next to the original, so what survived is evidence rather than a promise.
+- **Before and after, side by side.** Once a file is cleaned, the picture and the full metadata table can
+  be shown next to the original, so what survived is evidence rather than a promise.
 - **Export a diagnostic report.** If a result ever looks wrong, download a JSON report of exactly what the
   engine saw — hashes, findings, container blocks, settings and the verification result — and attach it to
   a bug report. One file from its details panel, or the whole batch as a single document. Sensitive values
   (GPS coordinates, serial numbers, author fields) are replaced with `[redacted]` by default; turn
   *Redact exported reports* off to write the exact values. It describes the metadata, not the picture, so
   give it a read before sharing either way.
+- **A spreadsheet summary.** Export the batch as CSV — file, format, size, findings, categories, bytes
+  removed, output size and whether it verified — for a report to someone who does not read JSON.
 - Batch clean, per-file states, progress — cancellable at any point, with the file in flight
-  allowed to finish so its output is still verified — and a store-only ZIP for download.
+  allowed to finish so its output is still verified — and a store-only ZIP for download that keeps the
+  folders you dropped in.
 - Optional deep-clean of trailing data after the end marker.
-- English and Chinese UI, light and dark themes, and a details dialog that keeps the keyboard inside it
-  while open and hands focus back on close.
+- English and Chinese UI, a light / dark / match-the-system switch, and a details dialog that keeps the
+  keyboard inside it while open and hands focus back on close.
 
 ![The details panel: camera, timestamps, GPS coordinates and embedded thumbnails, item by item](docs/screenshot-details.jpg)
 
@@ -88,6 +91,10 @@ Metadata is not only a privacy problem — some of it is needed for the picture 
 - **TIFF variants that are still refused**: BigTIFF, files with SubIFDs, camera raws (DNG / CR2 / CFA)
   and old-style JPEG (compression 6, whose stream hides behind `0x0201`). Those need a different rebuild
   or are not photographs at all, so they fail loudly instead of being half-cleaned.
+- **HDR gain maps are removed.** Some phones store a second, auxiliary image (a `tmap` item) that carries
+  the extra highlight information HDR displays use. It is not on the keep list, so it leaves with the other
+  unrecognised items: the main image keeps its pixels and colour profile, but HDR viewers fall back to the
+  dynamic range of the base image itself.
 - **Browsers cannot preview HEIC or TIFF** (AVIF is fine and shows up normally). Chrome and friends cannot
   decode either one, so the thumbnail falls back to a file icon. Cleaning, verification and download all
   work normally, pixel for pixel.
@@ -114,7 +121,8 @@ It removes C2PA manifests and XMP fields, which is where such labels usually liv
 visible watermarks or invisible pixel watermarks.
 
 **Can I use it offline?**
-Yes. Serve the built files from anywhere (or open the deployed page once, then go offline).
+Yes. Serve the built files from anywhere, or open the deployed page once and pick *Install* in the
+browser menu — after that it starts without a network like any other app.
 
 ## Contributing
 

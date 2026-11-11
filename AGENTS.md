@@ -16,5 +16,6 @@
 
 ## 质量门槛
 
-提交前跑 `pnpm check`（typecheck + 单测 + 构建 + 离线断言），改动涉及 UI 时再跑 `pnpm test:e2e`。
+提交前跑 `pnpm check`（typecheck + lint + 格式检查 + 单测 + 构建 + 离线断言），改动涉及 UI 时再跑
+`pnpm test:e2e`。新增组件或交互时，顺手让 axe 的两条无障碍用例覆盖它。
 测试三层：合成 fixture → 单测 → 用 Pillow 独立校验（`pnpm verify`）+ 真实 Chrome e2e。

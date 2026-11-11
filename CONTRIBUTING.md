@@ -21,14 +21,22 @@ pnpm dev          # http://localhost:5188
 | --- | --- |
 | `pnpm dev` | Vite dev server (no CSP, HMR) |
 | `pnpm build` | Production build into `dist/` (CSP injected) |
-| `pnpm preview` | Serve the production build |
+| `pnpm preview` | Serve the production build on port 5190 |
 | `pnpm typecheck` | `tsc --noEmit`, strict |
-| `pnpm test` | Vitest unit + round-trip tests |
+| `pnpm lint` | ESLint (TypeScript + the two hook rules) |
+| `pnpm format` | Prettier, in place |
+| `pnpm format:check` | Prettier, without writing |
+| `pnpm test` | Vitest unit + round-trip + fuzz tests |
+| `pnpm test:coverage` | The same run with a V8 coverage report in `coverage/` |
 | `pnpm test:e2e` | Playwright against a real Chrome |
 | `pnpm fixtures` | Regenerate `tests/fixtures/` |
 | `pnpm verify` | Pillow-based verification of `tests/output/` |
 | `pnpm real` | Fetch the pinned public sample corpus into `tests/real/` |
-| `pnpm check` | typecheck + unit tests + build + offline assertion |
+| `pnpm check` | typecheck + lint + format check + unit tests + build + offline assertion |
+
+`pnpm check` is what CI runs before the browser tests; run it before pushing. Coverage is reported but not
+gated: the React surfaces are covered by the e2e suite, so a unit-coverage threshold would only push for
+tests that assert the shape of JSX.
 
 ## Architecture
 
@@ -100,9 +108,14 @@ Three independent layers, because a metadata remover that lies is worse than no 
    the ZIP and unpack it with CPython's `zipfile` (`e2e/zip.ts`) — an implementation that shares no code
    with ours and checks every member's CRC-32; check orientation baking and the pre-clean orientation warning; open the
    all-metadata tab, expand a MakerNote hex dump and compare the listing against the cleaned output; assert
-   that the page made zero external requests; and load the production build with the network switched off
-   to prove the service worker keeps the app usable offline.
-5. **Real-world samples** (`tests/real.test.ts`) run camera and phone exports through the same pipeline.
+   that the page made zero external requests; load the production build with the network switched off to
+   prove the service worker keeps the app usable offline; and run axe-core over the landing page and the
+   details drawer in both themes, failing on serious or critical violations.
+5. **Fuzzing** (`tests/fuzz.test.ts`) mutates the fixtures deterministically — bit flips, truncation,
+   oversized lengths, removed slices, pure garbage — and asserts that every outcome is either a typed
+   `PipelineError` or a stripped file that re-verifies. A crash here is a page that dies on someone's
+   broken photo.
+6. **Real-world samples** (`tests/real.test.ts`) run camera and phone exports through the same pipeline.
    The folder is git-ignored because it holds personal photos: drop files into `tests/real/` and
    `pnpm test && pnpm verify` will clean them and decode the output with Pillow. `pnpm real` fetches a
    fixed set of public samples from ExifTool's corpus (commit plus per-file SHA-256 in
@@ -147,8 +160,11 @@ change: `git checkout --` the rest.
   flag the report uses, so a new field that can identify a person must set it.
 - A ZIP built from Blob references still has to describe each member: `method = 0`, the real CRC-32 in the
   local header, and bit 11 of the flags set or non-ASCII names turn into mojibake. Sizes and offsets are
-  32-bit, so an archive past 4 GiB needs Zip64 — we refuse it with a clear message instead of writing one
-  that no tool can unpack.
+  32-bit and the member count is 16-bit, so a batch that crosses those limits needs Zip64: mark the field
+  `0xFFFFFFFF` (or `0xFFFF`), put the real value in the `0x0001` extra field or the Zip64 end record, and
+  raise the version-needed to 45. The writer only emits those records when a value actually overflows;
+  `tests/zip.test.ts` lowers the threshold so a few hundred bytes exercise the same code Python's
+  `zipfile` then opens.
 
 HEIF-specific traps, all of which produced a broken file at least once:
 

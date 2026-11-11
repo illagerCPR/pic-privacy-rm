@@ -17,7 +17,8 @@
 ## 其它待办（低优先级）
 
 `TIFF` 的 BigTIFF、SubIFD、老式 JPEG（压缩方式 6，目前一律拒绝而不是半清理）；`BMP` / `JXL` 支持；
-`avis` 序列（带 `moov`，同样明确拒绝）。
+`avis` 序列（带 `moov`，同样明确拒绝）；HEIC/AVIF 的 HDR 增益图（`tmap`）—— 它是图像数据而不是元数据，
+但保留它至少要先拿到带增益图的真实样张来验证，目前按未识别项目删除，README 已如实写出后果。
 
 ## 已完成
 
@@ -32,6 +33,22 @@ XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）
 改为双 worker，列表行 memo + `content-visibility`，PNG 的 IDAT 不再做 CRC 全量读、JPEG 熵扫描改用
 `indexOf`，inspect 缓存加上限，报告哈希改为流式 SHA-256，并新增扫描进度行。
 
+**改进第二轮（2026-11-11，P3/P4）**：主题改为「浅色 / 深色 / 跟随系统」三态并记住选择；批量 ZIP 保留
+拖入时的文件夹结构，成员数或大小越过 32 位字段时自动写 ZIP64，4 GiB 上限随之消失；新增 CSV 批量汇总
+（带 BOM 与公式注入防护）；前后对比除元数据表外并排显示两张画面，并解释方向标签被删后朝向不同的缘由；
+详情抽屉改为完整的 tablist（方向键 / Home / End、`aria-controls`、面板常驻），隐私弹窗与抽屉共用同一套
+模态行为（焦点陷阱、滚动锁、Escape、焦点归还）；进度条改用 `progressbar` 语义，只在扫描结束时播报一次；
+批量进行中行内按钮置灰；`manifest.json` 与 192/512/maskable 图标让它可安装；README 关于 HDR 增益图的
+说法改成事实（`tmap` 按未识别项目删除）。
+
+工程面：Prettier 与 ESLint（TypeScript + 两条 hook 规则）接入 `pnpm check`；V8 覆盖率报告进入 CI 工件；
+确定性模糊测试（位翻转、截断、超长长度、垃圾数据）守住「只会抛出 typed error」这条线；axe-core 在明暗
+两种主题下检查首页与抽屉；e2e 进 CI（Chrome 用 runner 自带，不下载浏览器）；Dependabot 每周汇总工具链
+升级；preview 固定 5190、dev 占 5188，两者可同时运行；清理了 15 个无引用导出。质量面更新为
+**194 个单测（CI）+ 32 个真实样本（本地）+ 26 个 Chrome e2e**。
+
+第二轮之后仍待办：HSTS（需 Cloudflare 侧加响应头）、HDR 增益图（`tmap`，需带增益图的真实样张才能验证）。
+
 **可访问性与批量报告**：详情抽屉改为真正的模态对话框——打开即把焦点移入面板、Tab / Shift+Tab 在
 面板内首尾循环、Escape 关闭后焦点回到触发它的按钮。工具栏新增「导出批量报告」：把每张文件的
 `picprivacy.report/1` 装进一个 `picprivacy.batch/1` 文档（逐条仍是完整报告，可单独取出复用），
@@ -40,7 +57,8 @@ XMP / IPTC / C2PA 展开、厂商字节 hex 预览、清理前后双列对比）
 **批量健壮性**：批量清理可随时取消，检查点放在限流器回调内部（在飞的那张仍做完并复检），取消后
 排队项保持原状态、可再次启动。打包改为自研 store-only ZIP（`src/lib/zip.ts`）：成员是清理后 Blob
 的引用而不是副本，所以 2 GB 批次的峰值内存从「整包再复制一份」降到几 KB 表头；唯一的字节遍历是
-CRC-32（slicing-by-8），超过 4 GB 的经典 ZIP 上限会明确拒绝。验证换成 CPython `zipfile` 解包 ——
+CRC-32（slicing-by-8），超过 4 GB 的经典 ZIP 上限会明确拒绝（第二轮改为写 ZIP64）。验证换成 CPython
+`zipfile` 解包 ——
 与我们不共享任何代码，逐成员校验 CRC，并补了一个 40 个成员的 e2e 比对「压缩包成员字节 == 单张下载」。
 
 **TIFF（原低优先级项，已交付）**：`src/core/tiff-image.ts` 不解析像素，只重建目录——按白名单留下
