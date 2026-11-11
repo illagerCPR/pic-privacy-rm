@@ -50,9 +50,11 @@ export default defineConfig({
     sourcemap: false,
     reportCompressedSize: false,
   },
-  server: { port: 5188, strictPort: true },
+  // Bind the loopback address explicitly: `localhost` can resolve to ::1 on a
+  // CI runner, where Playwright's health check on 127.0.0.1 then never answers.
+  server: { host: '127.0.0.1', port: 5188, strictPort: true },
   // Dev and preview must not fight for one port: e2e drives both at once.
-  preview: { port: 5190, strictPort: true },
+  preview: { host: '127.0.0.1', port: 5190, strictPort: true },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],
